@@ -1,0 +1,121 @@
+{
+  "manifest_version": "0.2",
+  "name": "mgc-ado-tracker",
+  "display_name": "MGC ADO Tracker",
+  "version": "1.0.0",
+  "description": "Track Azure DevOps work items with AI-powered tagging and intelligent search",
+  "author": {
+    "name": "James Murrell",
+    "email": "murrell.james@gmail.com",
+    "url": "https://github.com/cs97jjm3"
+  },
+  "homepage": "https://github.com/cs97jjm3/mgc-ado-tracker",
+  "documentation": "https://github.com/cs97jjm3/mgc-ado-tracker#readme",
+  "support": "https://github.com/cs97jjm3/mgc-ado-tracker/issues",
+  "icon": "logo.png",
+  "server": {
+    "type": "node",
+    "entry_point": "src/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/src/index.js"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "create_work_item",
+      "description": "Create a new work item in Azure DevOps and track it locally with AI-generated tags"
+    },
+    {
+      "name": "search_work_items",
+      "description": "Search tracked work items using natural language, tags, or filters"
+    },
+    {
+      "name": "get_work_item",
+      "description": "Get detailed information about a specific work item"
+    },
+    {
+      "name": "sync_ado",
+      "description": "Sync work items from Azure DevOps to local tracker"
+    },
+    {
+      "name": "get_sync_status",
+      "description": "Get current sync status and last sync information"
+    },
+    {
+      "name": "list_tags",
+      "description": "List all available tags with usage counts"
+    },
+    {
+      "name": "launch_dashboard",
+      "description": "Get the URL for the MGC ADO Tracker web dashboard"
+    }
+  ],
+  "user_config": {
+    "ADO_ORG_URL": {
+      "type": "string",
+      "title": "Azure DevOps Organization URL",
+      "description": "Your Azure DevOps organization URL (e.g., https://dev.azure.com/your-org)",
+      "required": true,
+      "sensitive": false
+    },
+    "ADO_PAT": {
+      "type": "string",
+      "title": "Azure DevOps Personal Access Token",
+      "description": "Personal Access Token with Work Items (Read & Write) permissions",
+      "required": true,
+      "sensitive": true
+    },
+    "ADO_PROJECT": {
+      "type": "string",
+      "title": "Default Azure DevOps Project",
+      "description": "Default project name to track (case-sensitive)",
+      "required": true,
+      "sensitive": false
+    },
+    "DASHBOARD_PORT": {
+      "type": "number",
+      "title": "Dashboard Port",
+      "description": "Port for web dashboard",
+      "required": false,
+      "default": 3738,
+      "sensitive": false
+    },
+    "SYNC_ENABLED": {
+      "type": "boolean",
+      "title": "Enable Background Sync",
+      "description": "Enable automatic background sync with Azure DevOps",
+      "required": false,
+      "default": false,
+      "sensitive": false
+    },
+    "SYNC_INTERVAL_MINUTES": {
+      "type": "number",
+      "title": "Sync Interval (minutes)",
+      "description": "Sync frequency in minutes (only used if SYNC_ENABLED is true)",
+      "required": false,
+      "default": 60,
+      "sensitive": false
+    },
+    "AUTO_TAG_NEW_ITEMS": {
+      "type": "boolean",
+      "title": "Auto-tag New Items",
+      "description": "Automatically generate AI tags for synced work items",
+      "required": false,
+      "default": true,
+      "sensitive": false
+    },
+    "TAG_CONFIDENCE_THRESHOLD": {
+      "type": "number",
+      "title": "Tag Confidence Threshold",
+      "description": "Minimum confidence score for auto-generated tags (0.0 to 1.0)",
+      "required": false,
+      "default": 0.7,
+      "sensitive": false
+    }
+  },
+  "license": "MIT"
+}

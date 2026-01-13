@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MGC ADO Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 MGC ADO Tracker</h1>
+            <p>Track Azure DevOps work items with AI-powered intelligence</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="search">🔍 Search</button>
+            <button class="tab-btn" data-tab="stats">📊 Statistics</button>
+            <button class="tab-btn" data-tab="sync">🔄 Sync</button>
+            <button class="tab-btn" data-tab="settings">⚙️ Settings</button>
+        </nav>
+
+        <!-- Search Tab -->
+        <div id="search-tab" class="tab-content active">
+            <div class="search-section">
+                <input type="text" id="search-query" placeholder="Search work items..." />
+                <button id="search-btn">Search</button>
+                <button id="clear-search-btn">Clear</button>
+            </div>
+
+            <div class="filters">
+                <select id="filter-type">
+                    <option value="">All Types</option>
+                    <option value="User Story">User Story</option>
+                    <option value="Task">Task</option>
+                    <option value="Bug">Bug</option>
+                    <option value="Feature">Feature</option>
+                    <option value="Epic">Epic</option>
+                </select>
+
+                <select id="filter-state">
+                    <option value="">All States</option>
+                    <option value="New">New</option>
+                    <option value="Active">Active</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                </select>
+
+                <input type="text" id="filter-tags" placeholder="Filter by tags (comma separated)" />
+            </div>
+
+            <div id="search-results">
+                <p class="placeholder">Enter a search query or use filters above</p>
+            </div>
+        </div>
+
+        <!-- Statistics Tab -->
+        <div id="stats-tab" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Work Items</h3>
+                    <p class="stat-value" id="stat-total">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Tags</h3>
+                    <p class="stat-value" id="stat-tags">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Database Size</h3>
+                    <p class="stat-value" id="stat-size">-</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Last Sync</h3>
+                    <p class="stat-value" id="stat-last-sync">-</p>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <h3>Work Items by Type</h3>
+                <div id="chart-by-type"></div>
+            </div>
+
+            <div class="chart-section">
+                <h3>Work Items by State</h3>
+                <div id="chart-by-state"></div>
+            </div>
+
+            <div class="chart-section">
+                <h3>Top Tags</h3>
+                <div id="top-tags"></div>
+            </div>
+        </div>
+
+        <!-- Sync Tab -->
+        <div id="sync-tab" class="tab-content">
+            <div class="sync-section">
+                <h3>Manual Sync</h3>
+                <div class="form-group">
+                    <label>Project Name:</label>
+                    <input type="text" id="sync-project" placeholder="Your Azure DevOps Project" />
+                </div>
+                <div class="form-group">
+                    <label>From Date (optional):</label>
+                    <input type="date" id="sync-from-date" />
+                </div>
+                <div class="form-group">
+                    <label>Max Items:</label>
+                    <input type="number" id="sync-max-items" value="1000" />
+                </div>
+                <button id="sync-btn" class="primary-btn">Start Sync</button>
+                <button id="import-btn" class="secondary-btn">Import Historical Data</button>
+            </div>
+
+            <div class="sync-status">
+                <h3>Sync Status</h3>
+                <div id="sync-status-content">
+                    <p>Loading...</p>
+                </div>
+            </div>
+
+            <div class="sync-history">
+                <h3>Sync History</h3>
+                <div id="sync-history-content">
+                    <p>Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <div class="settings-section">
+                <div style="background: #e8f5e9; border: 1px solid #4caf50; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
+                    <h3 style="margin-top: 0; color: #2e7d32;">ℹ️ Configuration (Read-Only)</h3>
+                    <p style="margin: 8px 0;">All settings are configured through your Claude Desktop config file.</p>
+                    <p style="margin: 8px 0; font-size: 14px; color: #555;">Location: <code>C:\Users\murre\AppData\Roaming\Claude\claude_desktop_config.json</code></p>
+                </div>
+                
+                <h3>Current Configuration</h3>
+                <div style="background: #f5f5f5; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                    <div style="margin-bottom: 12px;">
+                        <strong>Organization URL:</strong>
+                        <p id="config-org-url" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong>Project:</strong>
+                        <p id="config-project" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong>Dashboard Port:</strong>
+                        <p id="config-port" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong>Background Sync:</strong>
+                        <p id="config-sync" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong>Auto-Tag:</strong>
+                        <p id="config-autotag" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
+                </div>
+
+                <h3>Database</h3>
+                <div style="background: #f5f5f5; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
+                    <div style="margin-bottom: 12px;">
+                        <strong>Location:</strong>
+                        <p id="db-location" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
+                </div>
+                <button id="backup-btn" class="secondary-btn">Backup Database</button>
+                <button id="refresh-stats-btn" class="secondary-btn">Refresh Stats</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

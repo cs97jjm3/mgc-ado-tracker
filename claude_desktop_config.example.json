@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "mgc-ado-tracker": {
+      "command": "node",
+      "args": ["/absolute/path/to/mgc-ado-tracker/src/index.js"],
+      "env": {
+        "ADO_ORG_URL": "https://dev.azure.com/your-organization",
+        "ADO_PAT": "your-personal-access-token-here",
+        "ADO_PROJECT": "YourProjectName",
+        "DASHBOARD_PORT": "3738",
+        "SYNC_ENABLED": "false",
+        "SYNC_INTERVAL_MINUTES": "60",
+        "AUTO_TAG_NEW_ITEMS": "true",
+        "TAG_CONFIDENCE_THRESHOLD": "0.7"
+      }
+    }
+  }
+}
