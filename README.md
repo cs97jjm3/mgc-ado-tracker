@@ -25,7 +25,8 @@ When you create or import work items, the tracker:
 - **Local Tracking**: Fast SQLite database with your own organizational structure
 - **Azure Sync**: Background sync keeps your local database current
 - **Web Dashboard**: Clean interface at `localhost:3738`
-- **MCP Integration**: Works seamlessly with Claude Desktop
+- **MCP Integration**: Works seamlessly with Claude Desktop for natural language search
+- **Export**: Download as CSV or Excel for analysis in spreadsheets
 
 ### AI-Generated Tags
 When a work item is created or imported, the tracker analyzes it and generates tags like:
@@ -37,133 +38,193 @@ Each tag gets a confidence score so you know which are most relevant.
 
 ### Dashboard Features
 - **Search Tab**: Quick search with filters for type, state, area, iteration, tags
-- **Statistics Tab**: Visual charts showing work items by type, state, and top tags
-- **Sync Tab**: Manual sync, import historical data, view sync history
-- **Settings Tab**: Configure background sync, auto-tagging, and database management
+- **Statistics Tab**: Visual charts showing work items by type, state, project, and top tags
+- **Sync Tab**: Manual sync with real-time console showing progress, import historical data, view sync history
+- **Settings Tab**: Database management (backup, shrink, export), configuration display
+- **Help Button**: Floating help button (?) with quick tips and instructions
+
+### Claude Desktop Integration
+Ask natural language questions in Claude chat:
+- "Did we create a story about [topic]?" - Searches instantly
+- "Show me all authentication bugs" - Filters by tags and type  
+- "What are my top 5 most used tags?" - Analyzes your data
+- "That thing about the side menu" - Finds it without exact titles
+
+**No need to remember iterations, area paths, or exact work item titles!**
 
 ## Installation
 
 ### Prerequisites
-- Node.js 18+ 
-- Azure DevOps account with Personal Access Token (PAT)
-- Claude Desktop (for MCP integration)
+- **Node.js 18+** ([Download](https://nodejs.org/))
+- **Azure DevOps account** with Personal Access Token (PAT)
+- **Claude Desktop** ([Download](https://claude.ai/download)) - for MCP integration
 
-### Setup
+### Step 1: Clone Repository
 
-1. **Clone or download this repository**
-
-2. **Install dependencies**
 ```bash
+git clone https://github.com/yourusername/mgc-ado-tracker.git
 cd mgc-ado-tracker
+```
+
+### Step 2: Install Dependencies
+
+```bash
 npm install
 ```
 
-3. **Configure Azure DevOps credentials**
+This installs:
+- `express` - Web server
+- `sql.js` - SQLite database
+- `azure-devops-node-api` - Azure DevOps API client
+- `@modelcontextprotocol/sdk` - MCP server
+- `@anthropic-ai/sdk` - AI tagging (optional)
 
-Create a Personal Access Token in Azure DevOps with these permissions:
-- Work Items (Read & Write)
-- Project and Team (Read)
+### Step 3: Create Azure DevOps Personal Access Token
 
-4. **Add to Claude Desktop**
+1. Go to Azure DevOps: `https://dev.azure.com/{your-organization}`
+2. Click your profile picture → **Personal access tokens**
+3. Click **+ New Token**
+4. Configure:
+   - **Name**: MGC ADO Tracker
+   - **Expiration**: Custom (recommend 1 year)
+   - **Scopes**: 
+     - ✅ Work Items: **Read & Write**
+     - ✅ Project and Team: **Read**
+5. Click **Create**
+6. **IMPORTANT**: Copy the token immediately (you can't see it again!)
 
-Add this to your Claude Desktop config file:
+### Step 4: Configure Claude Desktop
 
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+Edit your Claude Desktop configuration file:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`  
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`  
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add this configuration:
 
 ```json
 {
   "mcpServers": {
     "mgc-ado-tracker": {
       "command": "node",
-      "args": ["/path/to/mgc-ado-tracker/src/index.js"],
+      "args": ["/FULL/PATH/TO/mgc-ado-tracker/src/index.js"],
       "env": {
         "ADO_ORG_URL": "https://dev.azure.com/your-organization",
         "ADO_PAT": "your-personal-access-token-here",
-        "ADO_PROJECT": "YourProjectName",
+        "ADO_PROJECT": "YourDefaultProjectName",
         "DASHBOARD_PORT": "3738",
         "SYNC_ENABLED": "false",
-        "SYNC_INTERVAL_MINUTES": "60"
+        "SYNC_INTERVAL_MINUTES": "60",
+        "AUTO_TAG_NEW_ITEMS": "true",
+        "TAG_CONFIDENCE_THRESHOLD": "0.7"
       }
     }
   }
 }
 ```
 
-5. **Restart Claude Desktop**
+**Configuration Options:**
+- `ADO_ORG_URL` - Your Azure DevOps organization URL (required)
+- `ADO_PAT` - Personal Access Token from Step 3 (required)
+- `ADO_PROJECT` - Default project name (required for sync)
+- `DASHBOARD_PORT` - Web dashboard port (default: 3738)
+- `SYNC_ENABLED` - Enable automatic background sync (true/false)
+- `SYNC_INTERVAL_MINUTES` - How often to sync (default: 60)
+- `AUTO_TAG_NEW_ITEMS` - Generate AI tags on sync (default: true)
+- `TAG_CONFIDENCE_THRESHOLD` - Minimum tag confidence 0-1 (default: 0.7)
 
-6. **Open the dashboard**
+**Example paths:**
+- Windows: `C:\\Users\\YourName\\Documents\\GitHub\\mgc-ado-tracker\\src\\index.js`
+- macOS/Linux: `/Users/YourName/Projects/mgc-ado-tracker/src/index.js`
+
+### Step 5: Restart Claude Desktop
+
+1. Quit Claude Desktop completely
+2. Reopen Claude Desktop
+3. Look for 🔨 icon next to the message input - this confirms MCP is connected
+
+### Step 6: Open Dashboard
+
+Open your browser and go to:
 ```
 http://localhost:3738
 ```
 
+You should see the MGC ADO Tracker dashboard!
+
+### Step 7: Import Work Items
+
+1. Click the **Sync** tab
+2. Select your project from the dropdown
+3. Click **Start Sync** to import work items
+4. Watch the real-time console show progress
+5. Wait for sync to complete
+
+**First sync with 1000 items takes ~2-5 minutes**
+
 ## Usage
 
-### Creating Work Items via Claude
+### Searching via Claude Desktop Chat
+
+The real power is in Claude Desktop chat:
 
 ```
-Create a user story in MyProject:
-- Title: "Add OAuth2 authentication to API"
-- Description: "Implement OAuth2 flow for secure API access"
+You: "Did we create a story about medication reminders?"
+Claude: [Searches and finds the story instantly]
+
+You: "Show me all authentication bugs"
+Claude: [Returns filtered results with tags]
+
+You: "That thing about the side menu"
+Claude: [Finds: US-01: APOC Mobile: Dynamic Side Menu...]
 ```
 
-Claude will:
-1. Create the work item in Azure DevOps
-2. Add it to the local tracker
-3. Generate tags: `authentication`, `security`, `api`, etc.
-4. Return the work item ID and URL
+### Searching via Dashboard
 
-### Searching Work Items
+1. Go to **Search** tab
+2. Enter keywords or select filters
+3. Click **Search**
+4. Click any result to see full details
+5. Click the 🔗 link to open in Azure DevOps
 
-Via Claude:
-```
-Search for all authentication-related work items
-```
+### Syncing Work Items
 
-Via Dashboard:
-- Open http://localhost:3738
-- Enter keywords or select tags
-- Apply filters for type, state, area, iteration
+**Manual Sync:**
+1. Go to **Sync** tab
+2. Select project
+3. Optionally set "From Date" to sync only recent changes
+4. Click **Start Sync**
+5. Watch real-time progress in console
 
-### Importing Historical Data
+**Automatic Sync:**
+Set `SYNC_ENABLED: "true"` in config to sync automatically every hour (or custom interval).
 
-1. Go to the **Sync** tab in the dashboard
-2. Enter your project name
-3. Optionally set a "from date" to import items after that date
-4. Click **Import Historical Data**
+### Exporting Data
 
-The tracker will:
-- Fetch all work items from Azure DevOps
-- Analyze each one and generate tags
-- Store them in the local database
-- Show import progress
+1. Go to **Settings** tab
+2. Click **Export to CSV** or **Export to Excel**
+3. File downloads immediately
+4. Open in Excel, Google Sheets, etc. for analysis
 
-### Background Sync
+### Database Management
 
-Set `SYNC_ENABLED: "true"` in your config to enable automatic background sync.
+**Backup Database:**
+- Settings tab → **Backup Database**
+- Creates backup in `~/.ado-tracker/backups/`
+- Keeps last 7 backups automatically
 
-Sync runs every `SYNC_INTERVAL_MINUTES` and:
-- Fetches new/updated work items from Azure
-- Generates tags for new items
-- Updates the local database
+**Shrink Database:**
+- Settings tab → **Shrink Database**
+- Reclaims unused space after deletions
+- Shows space saved
 
-## Configuration Options
-
-### Required Settings
-- `ADO_ORG_URL` - Your Azure DevOps organization URL
-- `ADO_PAT` - Personal Access Token
-- `ADO_PROJECT` - Default project name
-
-### Optional Settings
-- `DASHBOARD_PORT` - Web dashboard port (default: 3738)
-- `SYNC_ENABLED` - Enable background sync (default: false)
-- `SYNC_INTERVAL_MINUTES` - Sync frequency (default: 60)
-- `AUTO_TAG_NEW_ITEMS` - Auto-tag synced items (default: true)
-- `TAG_CONFIDENCE_THRESHOLD` - Minimum confidence for tags (default: 0.7)
+**Database Location:**  
+`~/.ado-tracker/database.db`
 
 ## MCP Tools
 
-Available tools when using with Claude:
+Available tools when using with Claude Desktop:
 
 - `create_work_item` - Create work item in ADO and track locally
 - `search_work_items` - Search tracked items by keywords/tags/filters
@@ -172,6 +233,19 @@ Available tools when using with Claude:
 - `get_sync_status` - Check sync status and last sync time
 - `list_tags` - List all available tags with usage counts
 - `launch_dashboard` - Get dashboard URL
+
+### Example MCP Usage
+
+```
+You: "Search for all mobile features"
+Claude: [Calls search_work_items with tags: ["mobile", "feature"]]
+
+You: "What's work item #1841957?"
+Claude: [Calls get_work_item with adoId: "1841957"]]
+
+You: "List my top tags"
+Claude: [Calls list_tags and shows usage counts]
+```
 
 ## Database
 

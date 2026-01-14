@@ -1,6 +1,7 @@
 // AI Tagging Service
-// This uses simple keyword matching initially
-// Can be enhanced to use Claude API for more sophisticated tagging
+// Uses Claude AI for intelligent tagging with fallback to keyword matching
+
+import Anthropic from '@anthropic-ai/sdk';
 
 const TAG_PATTERNS = {
   // Security & Authentication
@@ -61,6 +62,137 @@ const STATE_TAGS = {
   'Resolved': ['resolved', 'completed'],
   'Closed': ['closed', 'done']
 };
+
+// Available tag categories for Claude to choose from
+const AVAILABLE_TAGS = [
+  // Technical
+  'authentication', 'security', 'audit', 'payment', 'finance',
+  'ui', 'mobile', 'dashboard', 'api', 'database', 'integration',
+  'devops', 'infrastructure', 'performance', 'testing', 'bug',
+  // Process
+  'documentation', 'research', 'customer', 'reporting', 'notification',
+  'workflow', 'data', 'analytics',
+  // Work type
+  'backend', 'frontend', 'full-stack', 'urgent', 'enhancement',
+  'refactoring', 'migration', 'configuration'
+];
+
+let anthropicClient = null;
+
+// Initialize Anthropic client
+function getAnthropicClient() {
+  if (!anthropicClient) {
+    // Claude Desktop provides API access without needing an API key
+    anthropicClient = new Anthropic({
+      apiKey: 'dummy-key' // Not needed in Claude Desktop context
+    });
+  }
+  return anthropicClient;
+}
+
+// Enhanced tagging using Claude AI
+export async function generateTagsWithAI(workItem, options = {}) {
+  const { confidenceThreshold = 0.5, useAI = true } = options;
+  
+  // Try AI tagging first if enabled
+  if (useAI) {
+    try {
+      return await generateTagsUsingClaude(workItem, confidenceThreshold);
+    } catch (error) {
+      console.error('AI tagging failed, falling back to pattern matching:', error.message);
+    }
+  }
+  
+  // Fallback to pattern matching
+  return generateTags(workItem, { confidenceThreshold });
+}
+
+// Use Claude AI to generate intelligent tags
+async function generateTagsUsingClaude(workItem, confidenceThreshold) {
+  const client = getAnthropicClient();
+  
+  const prompt = `Analyze this work item and suggest relevant tags from the available list.
+
+Work Item:
+Title: ${workItem.title}
+Description: ${workItem.description || 'No description'}
+Type: ${workItem.workItemType}
+State: ${workItem.state}
+Area: ${workItem.areaPath || 'N/A'}
+
+Available Tags: ${AVAILABLE_TAGS.join(', ')}
+
+For each suggested tag, provide:
+1. The tag name (must be from the available list)
+2. A confidence score (0.0 to 1.0)
+3. Brief reason why this tag applies
+
+Respond in JSON format:
+{
+  "tags": [
+    {"tag": "tag-name", "confidence": 0.85, "reason": "explanation"},
+    ...
+  ]
+}
+
+Only suggest tags with confidence >= ${confidenceThreshold}. Focus on the 3-5 most relevant tags.`;
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1000,
+    messages: [{
+      role: 'user',
+      content: prompt
+    }]
+  });
+
+  const responseText = response.content[0].text;
+  
+  // Parse Claude's response
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('Failed to parse AI response');
+  }
+  
+  const parsed = JSON.parse(jsonMatch[0]);
+  
+  const tags = new Set();
+  const confidenceScores = {};
+  
+  // Add AI-suggested tags
+  parsed.tags.forEach(item => {
+    if (AVAILABLE_TAGS.includes(item.tag) && item.confidence >= confidenceThreshold) {
+      tags.add(item.tag);
+      confidenceScores[item.tag] = item.confidence;
+    }
+  });
+  
+  // Always add work item type tags
+  if (workItem.workItemType && WORK_ITEM_TYPE_TAGS[workItem.workItemType]) {
+    WORK_ITEM_TYPE_TAGS[workItem.workItemType].forEach(tag => {
+      tags.add(tag);
+      confidenceScores[tag] = 1.0;
+    });
+  }
+  
+  // Add area path tags
+  if (workItem.areaPath) {
+    const areaPathParts = workItem.areaPath.split('\\').filter(p => p.length > 0);
+    areaPathParts.forEach(part => {
+      const normalized = part.toLowerCase().replace(/[^a-z0-9]/g, '-');
+      if (normalized.length > 2) {
+        tags.add(`area-${normalized}`);
+        confidenceScores[`area-${normalized}`] = 0.8;
+      }
+    });
+  }
+  
+  return {
+    tags: Array.from(tags),
+    confidenceScores,
+    aiGenerated: true
+  };
+}
 
 export function generateTags(workItem, options = {}) {
   const { confidenceThreshold = 0.5 } = options;

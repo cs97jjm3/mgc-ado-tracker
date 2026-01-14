@@ -60,9 +60,8 @@ export async function getWorkItemsFromADO(projectName, options = {}) {
       const batchIds = ids.slice(i, i + batchSize);
       const batch = await witApi.getWorkItems(
         batchIds,
-        projectName,
-        null, // fields
-        null, // asOf
+        undefined, // fields - must be undefined, not null  
+        undefined, // asOf
         'all' // expand (get relations)
       );
       workItems.push(...batch);
@@ -81,7 +80,7 @@ export async function getWorkItemByIdFromADO(id, projectName) {
   }
 
   try {
-    const workItem = await witApi.getWorkItem(id, projectName, null, null, 'all');
+    const workItem = await witApi.getWorkItem(id, projectName, undefined, null, 'all');
     return workItem;
   } catch (error) {
     console.error(`Failed to fetch work item ${id}:`, error.message);
@@ -106,7 +105,7 @@ export async function createWorkItemInADO(projectName, workItemType, fields) {
     }
 
     const workItem = await witApi.createWorkItem(
-      null, // custom headers
+      undefined, // custom headers
       document,
       projectName,
       workItemType
@@ -136,7 +135,7 @@ export async function updateWorkItemInADO(id, projectName, fields) {
     }
 
     const workItem = await witApi.updateWorkItem(
-      null, // custom headers
+      undefined, // custom headers
       document,
       id,
       projectName

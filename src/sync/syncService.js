@@ -1,10 +1,16 @@
 import { getWorkItemsFromADO, parseWorkItemFromADO } from '../api/azureDevOps.js';
 import { addWorkItem, getAllWorkItems, addWorkItemLink } from '../database/workItems.js';
-import { generateTags } from '../utils/aiTagging.js';
+import { generateTags, generateTagsWithAI } from '../utils/aiTagging.js';
 import { getDatabase, saveDatabase } from '../database/db.js';
 
 let syncInProgress = false;
 let lastSyncResult = null;
+let syncProgress = {
+  current: 0,
+  total: 0,
+  currentItem: null,
+  status: 'idle'
+};
 
 export async function syncWithAzureDevOps(projectName, options = {}) {
   if (syncInProgress) {
@@ -18,7 +24,8 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
     fromDate = null,
     maxItems = 1000,
     autoTag = true,
-    confidenceThreshold = 0.5
+    confidenceThreshold = 0.5,
+    batchSize = 50 // Process in batches
   } = options;
 
   const result = {
@@ -32,20 +39,35 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
 
   try {
     // Fetch work items from Azure DevOps
+    syncProgress = { current: 0, total: 0, currentItem: 'Fetching work items from Azure DevOps...', status: 'fetching' };
     const adoWorkItems = await getWorkItemsFromADO(projectName, { fromDate, maxItems });
+    
+    syncProgress.total = adoWorkItems.length;
+    syncProgress.status = 'processing';
 
     // Get existing items from local database
     const existingItems = getAllWorkItems();
     const existingMap = new Map(existingItems.map(item => [item.ado_id, item]));
 
-    // Process each work item
-    for (const adoItem of adoWorkItems) {
-      try {
+    // Process in batches for better performance
+    for (let batchStart = 0; batchStart < adoWorkItems.length; batchStart += batchSize) {
+      const batch = adoWorkItems.slice(batchStart, Math.min(batchStart + batchSize, adoWorkItems.length));
+      
+      // Process batch items in parallel
+      await Promise.all(batch.map(async (adoItem, batchIndex) => {
+        const i = batchStart + batchIndex;
+        syncProgress.current = i + 1;
+        syncProgress.currentItem = `Processing #${adoItem.id}: ${adoItem.fields['System.Title']}`;
+        
+        try {
         const parsedItem = parseWorkItemFromADO(adoItem);
         
         // Generate AI tags if enabled
         if (autoTag) {
-          const { tags, confidenceScores } = generateTags(parsedItem, { confidenceThreshold });
+          const { tags, confidenceScores } = await generateTagsWithAI(parsedItem, { 
+            confidenceThreshold,
+            useAI: true // Enable AI tagging
+          });
           parsedItem.tags = tags;
           parsedItem.confidenceScores = confidenceScores;
         }
@@ -81,10 +103,11 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
       } catch (error) {
         console.error(`Error processing work item ${adoItem.id}:`, error.message);
         result.errors.push({
-          adoId: adoItem.id,
-          error: error.message
+        adoId: adoItem.id,
+        error: error.message
         });
-      }
+        }
+        }));
     }
 
     // Optionally handle deleted items (items in DB but not in ADO)
@@ -231,4 +254,12 @@ export function isSyncInProgress() {
 
 export function getLastSyncResult() {
   return lastSyncResult;
+}
+
+export function getSyncProgress() {
+  return {
+    ...syncProgress,
+    inProgress: syncInProgress,
+    percentage: syncProgress.total > 0 ? Math.round((syncProgress.current / syncProgress.total) * 100) : 0
+  };
 }

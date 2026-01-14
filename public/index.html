@@ -1,4 +1,15 @@
-<!DOCTYPE html>
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; font-weight: 500; margin-bottom: 8px;">Sync Options:</label>
+                <div style="display: flex; gap: 20px; align-items: center;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="sync-enable-ai-tags" checked />
+                        <span>Generate AI Tags (slower but smarter)</span>
+                    </label>
+                </div>
+                <p style="font-size: 13px; color: #666; margin-top: 8px;">
+                    Uncheck for faster sync - tags will be auto-generated from area/iteration only
+                </p>
+            </div><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -29,6 +40,10 @@
             </div>
 
             <div class="filters">
+                <select id="filter-project">
+                    <option value="">All Projects</option>
+                </select>
+                
                 <select id="filter-type">
                     <option value="">All Types</option>
                     <option value="User Story">User Story</option>
@@ -58,35 +73,64 @@
         <div id="stats-tab" class="tab-content">
             <div class="stats-grid">
                 <div class="stat-card">
-                    <h3>Total Work Items</h3>
+                    <h3>📦 Total Work Items</h3>
                     <p class="stat-value" id="stat-total">-</p>
                 </div>
-                <div class="stat-card">
-                    <h3>Total Tags</h3>
+                <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <h3>🏷️ Total Tags</h3>
                     <p class="stat-value" id="stat-tags">-</p>
                 </div>
-                <div class="stat-card">
-                    <h3>Database Size</h3>
+                <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                    <h3>💾 Database Size</h3>
                     <p class="stat-value" id="stat-size">-</p>
                 </div>
-                <div class="stat-card">
-                    <h3>Last Sync</h3>
+                <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                    <h3>🔄 Last Sync</h3>
                     <p class="stat-value" id="stat-last-sync">-</p>
                 </div>
             </div>
 
+            <!-- AI Insights Info -->
+            <div class="chart-section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">🤖 AI-Powered Insights</h3>
+                <p style="opacity: 0.9; margin-bottom: 10px; line-height: 1.6;">
+                    <strong>Want intelligent analysis of your work items and tags?</strong><br/>
+                    Use Claude Desktop chat to ask questions like:
+                </p>
+                <ul style="opacity: 0.9; margin: 15px 0; padding-left: 20px; line-height: 1.8;">
+                    <li>"What are my top 5 most used tags?"</li>
+                    <li>"Show me all authentication bugs"</li>
+                    <li>"Did we create a story about [topic]?"</li>
+                    <li>"What patterns do you see in my work?"</li>
+                </ul>
+                <p style="opacity: 0.9; font-size: 14px; margin-top: 15px;">
+                    💡 <strong>Tip:</strong> Claude can search your 1000+ work items instantly using natural language - no need to remember iterations, area paths, or exact titles!
+                </p>
+            </div>
+
             <div class="chart-section">
-                <h3>Work Items by Type</h3>
+                <h3>📊 Work Items by Type</h3>
+                <div style="margin-bottom: 15px;">
+                    <label style="font-weight: 500; margin-right: 10px;">Filter by Project:</label>
+                    <select id="stats-project-filter" style="padding: 8px; border-radius: 6px; border: 2px solid #e0e6ed;">
+                        <option value="">All Projects</option>
+                    </select>
+                </div>
                 <div id="chart-by-type"></div>
             </div>
 
             <div class="chart-section">
-                <h3>Work Items by State</h3>
+                <h3>📁 Work Items by Project</h3>
+                <div id="chart-by-project"></div>
+            </div>
+
+            <div class="chart-section">
+                <h3>✅ Work Items by State</h3>
                 <div id="chart-by-state"></div>
             </div>
 
             <div class="chart-section">
-                <h3>Top Tags</h3>
+                <h3>🔥 Top Tags</h3>
                 <div id="top-tags"></div>
             </div>
         </div>
@@ -97,7 +141,10 @@
                 <h3>Manual Sync</h3>
                 <div class="form-group">
                     <label>Project Name:</label>
-                    <input type="text" id="sync-project" placeholder="Your Azure DevOps Project" />
+                    <select id="sync-project">
+                        <option value="">Loading projects...</option>
+                    </select>
+                    <small style="color: #666; font-size: 12px;">Sync work items from any project you have access to. Each project is stored separately.</small>
                 </div>
                 <div class="form-group">
                     <label>From Date (optional):</label>
@@ -165,9 +212,18 @@
                         <strong>Location:</strong>
                         <p id="db-location" style="margin: 4px 0; color: #666;">Loading...</p>
                     </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong>Size:</strong>
+                        <p id="db-size-display" style="margin: 4px 0; color: #666;">Loading...</p>
+                    </div>
                 </div>
-                <button id="backup-btn" class="secondary-btn">Backup Database</button>
-                <button id="refresh-stats-btn" class="secondary-btn">Refresh Stats</button>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="backup-btn" class="secondary-btn">Backup Database</button>
+                    <button id="shrink-btn" class="secondary-btn">Shrink Database</button>
+                    <button id="export-csv-btn" class="secondary-btn">Export to CSV</button>
+                    <button id="export-excel-btn" class="secondary-btn">Export to Excel</button>
+                    <button id="refresh-stats-btn" class="secondary-btn">Refresh Stats</button>
+                </div>
             </div>
         </div>
     </div>
@@ -178,6 +234,73 @@
             <div id="modal-body"></div>
         </div>
     </div>
+
+    <div id="sync-console-modal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">🔄 Sync Console</h2>
+                <span class="close" id="sync-console-close">&times;</span>
+            </div>
+            <div id="sync-progress" style="margin-bottom: 20px;">
+                <div style="background: #e0e6ed; border-radius: 10px; height: 30px; overflow: hidden;">
+                    <div id="sync-progress-bar" style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;"></div>
+                </div>
+            </div>
+            <div id="sync-console" style="background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; height: 400px; overflow-y: auto; line-height: 1.6;">
+                <div style="color: #4ec9b0;">[SYNC] Initializing...</div>
+            </div>
+            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="sync-console-clear" class="secondary-btn">Clear Console</button>
+                <button id="sync-console-close-btn" class="primary-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0;">❓ Quick Help</h2>
+                <span class="close" id="help-close">&times;</span>
+            </div>
+            <div style="line-height: 1.8;">
+                <h3>🔍 Search Tab</h3>
+                <p>Find work items by keywords, tags, or filters. Try natural searches like "authentication bug" or "mobile feature".</p>
+                
+                <h3>📊 Statistics Tab</h3>
+                <p>View charts and breakdowns by type, state, and project. Filter by project to see specific area stats.</p>
+                
+                <h3>🔄 Sync Tab</h3>
+                <p>Import work items from Azure DevOps. Select a project and click <strong>Start Sync</strong>. Watch real-time progress in the console.</p>
+                
+                <h3>🤖 AI-Powered Search</h3>
+                <p><strong>Use Claude Desktop chat</strong> for intelligent search:</p>
+                <ul>
+                    <li>"Did we create a story about [topic]?"</li>
+                    <li>"Show me all authentication bugs"</li>
+                    <li>"What are my top 5 most used tags?"</li>
+                </ul>
+                <p>Claude searches your work items instantly using natural language!</p>
+                
+                <h3>💾 Database</h3>
+                <p><strong>Settings tab:</strong></p>
+                <ul>
+                    <li><strong>Backup:</strong> Create a backup copy</li>
+                    <li><strong>Shrink:</strong> Reclaim unused space</li>
+                    <li><strong>Export:</strong> Download as CSV or Excel</li>
+                </ul>
+                
+                <h3>🔗 Work Item Links</h3>
+                <p>Click any work item to see details. Click the ID link (🔗) to open in Azure DevOps.</p>
+            </div>
+            <div style="margin-top: 20px; text-align: center;">
+                <button id="help-close-btn" class="primary-btn">Got It!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Help Button -->
+    <button class="help-button" id="help-btn" title="Help & Tips">❓</button>
 
     <script src="/js/app.js"></script>
 </body>

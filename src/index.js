@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -385,6 +386,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Initialize and start server
 async function main() {
+  // Debug: Check if env vars are loaded
+  if (!ADO_ORG_URL || !ADO_PAT) {
+    console.error('WARNING: Azure DevOps credentials not configured');
+    console.error('ADO_ORG_URL present:', !!ADO_ORG_URL);
+    console.error('ADO_PAT present:', !!ADO_PAT);
+    console.error('ADO_PROJECT present:', !!ADO_PROJECT);
+  }
+
   // Initialize database
   await initDatabase();
 
