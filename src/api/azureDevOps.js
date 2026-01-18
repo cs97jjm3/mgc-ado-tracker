@@ -179,6 +179,40 @@ export function parseWorkItemFromADO(adoWorkItem) {
     createdDate: fields['System.CreatedDate'] || '',
     modifiedDate: fields['System.ChangedDate'] || '',
     projectName: fields['System.TeamProject'] || '',
+    
+    // Rich text fields
+    acceptanceCriteria: fields['Microsoft.VSTS.Common.AcceptanceCriteria'] || '',
+    reproSteps: fields['Microsoft.VSTS.TCM.ReproSteps'] || '',
+    systemInfo: fields['Microsoft.VSTS.TCM.SystemInfo'] || '',
+    
+    // Planning & priority
+    priority: fields['Microsoft.VSTS.Common.Priority'] || null,
+    severity: fields['Microsoft.VSTS.Common.Severity'] || '',
+    storyPoints: fields['Microsoft.VSTS.Scheduling.StoryPoints'] || null,
+    businessValue: fields['Microsoft.VSTS.Common.BusinessValue'] || null,
+    risk: fields['Microsoft.VSTS.Common.Risk'] || '',
+    
+    // Version/build info
+    foundInBuild: fields['Microsoft.VSTS.Build.FoundIn'] || '',
+    integrationBuild: fields['Microsoft.VSTS.Build.IntegrationBuild'] || '',
+    
+    // Workflow tracking
+    resolvedBy: fields['Microsoft.VSTS.Common.ResolvedBy']?.displayName || '',
+    resolvedDate: fields['Microsoft.VSTS.Common.ResolvedDate'] || '',
+    closedBy: fields['Microsoft.VSTS.Common.ClosedBy']?.displayName || '',
+    closedDate: fields['Microsoft.VSTS.Common.ClosedDate'] || '',
+    activatedBy: fields['Microsoft.VSTS.Common.ActivatedBy']?.displayName || '',
+    activatedDate: fields['Microsoft.VSTS.Common.ActivatedDate'] || '',
+    stateReason: fields['System.Reason'] || '',
+    
+    // Effort tracking
+    originalEstimate: fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] || null,
+    remainingWork: fields['Microsoft.VSTS.Scheduling.RemainingWork'] || null,
+    completedWork: fields['Microsoft.VSTS.Scheduling.CompletedWork'] || null,
+    
+    // ADO native tags
+    adoTags: fields['System.Tags'] || '',
+    
     tags: [], // Will be added by AI tagging
     confidenceScores: {},
     rawData: adoWorkItem

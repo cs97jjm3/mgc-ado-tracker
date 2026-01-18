@@ -30,7 +30,40 @@ CREATE TABLE IF NOT EXISTS work_items (
   confidence_scores TEXT,
   project_name TEXT,
   raw_data TEXT,
-  synced_at TEXT
+  synced_at TEXT,
+  
+  -- Rich text fields for search & tagging
+  acceptance_criteria TEXT,
+  repro_steps TEXT,
+  system_info TEXT,
+  
+  -- Planning & priority
+  priority INTEGER,
+  severity TEXT,
+  story_points REAL,
+  business_value INTEGER,
+  risk TEXT,
+  
+  -- Version/build info
+  found_in_build TEXT,
+  integration_build TEXT,
+  
+  -- Workflow tracking
+  resolved_by TEXT,
+  resolved_date TEXT,
+  closed_by TEXT,
+  closed_date TEXT,
+  activated_by TEXT,
+  activated_date TEXT,
+  state_reason TEXT,
+  
+  -- Effort tracking
+  original_estimate REAL,
+  remaining_work REAL,
+  completed_work REAL,
+  
+  -- ADO native tags
+  ado_tags TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -46,8 +79,27 @@ CREATE TABLE IF NOT EXISTS work_item_links (
   target_id TEXT,
   link_type TEXT,
   created_at TEXT,
+  link_comment TEXT,
   FOREIGN KEY(source_id) REFERENCES work_items(ado_id),
   FOREIGN KEY(target_id) REFERENCES work_items(ado_id)
+);
+
+CREATE TABLE IF NOT EXISTS work_item_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_item_id TEXT,
+  name TEXT,
+  url TEXT,
+  created_by TEXT,
+  created_date TEXT,
+  FOREIGN KEY(work_item_id) REFERENCES work_items(ado_id)
+);
+
+CREATE TABLE IF NOT EXISTS work_item_hyperlinks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_item_id TEXT,
+  url TEXT,
+  comment TEXT,
+  FOREIGN KEY(work_item_id) REFERENCES work_items(ado_id)
 );
 
 CREATE TABLE IF NOT EXISTS sync_log (
@@ -76,7 +128,141 @@ CREATE INDEX IF NOT EXISTS idx_state ON work_items(state);
 CREATE INDEX IF NOT EXISTS idx_type ON work_items(work_item_type);
 CREATE INDEX IF NOT EXISTS idx_created_date ON work_items(created_date);
 CREATE INDEX IF NOT EXISTS idx_modified_date ON work_items(modified_date);
+CREATE INDEX IF NOT EXISTS idx_priority ON work_items(priority);
+CREATE INDEX IF NOT EXISTS idx_story_points ON work_items(story_points);
 `;
+
+// Migration: Add needs_tagging column if it doesn't exist
+function migrateNeedsTaggingColumn() {
+  try {
+    // Check if column exists
+    const result = db.exec(`
+      PRAGMA table_info(work_items)
+    `);
+    
+    const columns = result[0]?.values || [];
+    const hasNeedsTagging = columns.some(col => col[1] === 'needs_tagging');
+    
+    if (!hasNeedsTagging) {
+      // Add column with default value of 1 for items without tags
+      db.exec(`
+        ALTER TABLE work_items 
+        ADD COLUMN needs_tagging INTEGER DEFAULT 1
+      `);
+      
+      // Set needs_tagging to 0 for items that already have tags
+      db.exec(`
+        UPDATE work_items 
+        SET needs_tagging = 0 
+        WHERE tags IS NOT NULL AND tags != '[]' AND tags != ''
+      `);
+      
+      // Create index
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_needs_tagging ON work_items(needs_tagging)
+      `);
+      
+      saveDatabase();
+      console.error('Migration: Added needs_tagging column to work_items table');
+    }
+  } catch (error) {
+    // Column might already exist, ignore error
+    if (!error.message.includes('duplicate column')) {
+      console.error('Migration error:', error.message);
+    }
+  }
+}
+
+// Migration: Add enhanced fields for v1.3.0
+function migrateEnhancedFields() {
+  try {
+    // Check if work_items table exists
+    const tables = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='work_items'`);
+    if (!tables || tables.length === 0 || !tables[0].values || tables[0].values.length === 0) {
+      console.error('Migration: work_items table does not exist yet, skipping migration');
+      return;
+    }
+
+    const result = db.exec(`PRAGMA table_info(work_items)`);
+    if (!result || result.length === 0 || !result[0].values) {
+      console.error('Migration: Cannot read work_items table info');
+      return;
+    }
+    
+    const columns = result[0].values || [];
+    const columnNames = columns.map(col => col[1]);
+    
+    const newColumns = [
+      { name: 'acceptance_criteria', type: 'TEXT' },
+      { name: 'repro_steps', type: 'TEXT' },
+      { name: 'system_info', type: 'TEXT' },
+      { name: 'priority', type: 'INTEGER' },
+      { name: 'severity', type: 'TEXT' },
+      { name: 'story_points', type: 'REAL' },
+      { name: 'business_value', type: 'INTEGER' },
+      { name: 'risk', type: 'TEXT' },
+      { name: 'found_in_build', type: 'TEXT' },
+      { name: 'integration_build', type: 'TEXT' },
+      { name: 'resolved_by', type: 'TEXT' },
+      { name: 'resolved_date', type: 'TEXT' },
+      { name: 'closed_by', type: 'TEXT' },
+      { name: 'closed_date', type: 'TEXT' },
+      { name: 'activated_by', type: 'TEXT' },
+      { name: 'activated_date', type: 'TEXT' },
+      { name: 'state_reason', type: 'TEXT' },
+      { name: 'original_estimate', type: 'REAL' },
+      { name: 'remaining_work', type: 'REAL' },
+      { name: 'completed_work', type: 'REAL' },
+      { name: 'ado_tags', type: 'TEXT' }
+    ];
+    
+    let migrated = false;
+    for (const col of newColumns) {
+      if (!columnNames.includes(col.name)) {
+        try {
+          db.exec(`ALTER TABLE work_items ADD COLUMN ${col.name} ${col.type}`);
+          migrated = true;
+        } catch (err) {
+          console.error(`Migration: Error adding column ${col.name}:`, err.message);
+        }
+      }
+    }
+    
+    // Add link_comment to work_item_links if table exists
+    const linksTables = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='work_item_links'`);
+    if (linksTables && linksTables.length > 0 && linksTables[0].values && linksTables[0].values.length > 0) {
+      const linksResult = db.exec(`PRAGMA table_info(work_item_links)`);
+      if (linksResult && linksResult.length > 0 && linksResult[0].values) {
+        const linksColumns = linksResult[0].values || [];
+        const linksColumnNames = linksColumns.map(col => col[1]);
+        
+        if (!linksColumnNames.includes('link_comment')) {
+          try {
+            db.exec(`ALTER TABLE work_item_links ADD COLUMN link_comment TEXT`);
+            migrated = true;
+          } catch (err) {
+            console.error('Migration: Error adding link_comment:', err.message);
+          }
+        }
+      }
+    }
+    
+    if (migrated) {
+      // Create new indexes
+      try {
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_priority ON work_items(priority)`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_story_points ON work_items(story_points)`);
+      } catch (err) {
+        console.error('Migration: Error creating indexes:', err.message);
+      }
+      
+      saveDatabase();
+      console.error('Migration: Added enhanced fields to work_items table');
+    }
+  } catch (error) {
+    console.error('Migration error:', error.message);
+  }
+}
 
 export async function initDatabase() {
   try {
@@ -100,8 +286,12 @@ export async function initDatabase() {
       db = new SQL.Database();
     }
 
-    // Create schema
-    db.run(SCHEMA);
+    // Create base schema (tables only, no column dependencies)
+    db.exec(SCHEMA);
+    
+    // Run migrations AFTER base schema is created
+    migrateNeedsTaggingColumn();
+    migrateEnhancedFields();
     
     // Save initial database
     saveDatabase();

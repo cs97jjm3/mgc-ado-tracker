@@ -8,11 +8,11 @@ Built by a Business Analyst who's lived through the chaos of poorly organized Az
 
 MGC ADO Tracker solves a real problem: **finding work items in messy Azure DevOps projects**.
 
-When you create or import work items, the tracker:
-- 📝 Logs them to a local SQLite database
-- 🏷️ Auto-generates intelligent tags using AI analysis
+The tracker uses a two-step process:
+- 📥 **Fast Sync**: Quickly imports work items from Azure DevOps to local database
+- 🏷️ **Smart Tagging**: Processes items in batches using AI to generate intelligent tags
 - 🔍 Makes them searchable by content, not just Azure's structure
-- 🔄 Syncs with Azure DevOps to stay current
+- 🔄 Background sync keeps your local database current
 - 📊 Provides a clean web dashboard for searching and analysis
 
 **No more clicking through iterations and area paths hoping to find that authentication story you created 3 months ago.**
@@ -29,12 +29,24 @@ When you create or import work items, the tracker:
 - **Export**: Download as CSV or Excel for analysis in spreadsheets
 
 ### AI-Generated Tags
-When a work item is created or imported, the tracker analyzes it and generates tags like:
-- `authentication`, `security`, `payment`, `mobile`, `api`, `testing`, `bug`
+
+Tags are generated in two ways:
+
+**During Sync (Fast - Basic Tags):**
 - Area-based tags: `area-security`, `area-mobile`
 - Iteration-based tags: `iteration-sprint-23`
+- Work item type tags: `story`, `bug`, `task`
 
-Each tag gets a confidence score so you know which are most relevant.
+**After Sync (Smart - AI Tags):**
+Use the `tag_pending_work_items` tool or dashboard to process items with AI:
+- Content-based tags: `authentication`, `security`, `payment`, `mobile`, `api`
+- Context-aware analysis of title and description
+- Confidence scores for each tag (0.0 to 1.0)
+
+**Why separate sync and tagging?**
+- ⚡ Fast sync: Import 1000 items in ~30 seconds
+- 🎯 Batch tagging: Process 10-50 items at a time with AI
+- 🔄 Flexible: Tag items when you need smart analysis
 
 ### Dashboard Features
 - **Search Tab**: Quick search with filters for type, state, area, iteration, tags
@@ -155,13 +167,26 @@ You should see the MGC ADO Tracker dashboard!
 
 ### Step 7: Import Work Items
 
+**Step 7a: Sync Work Items (Fast)**
 1. Click the **Sync** tab
 2. Select your project from the dropdown
 3. Click **Start Sync** to import work items
 4. Watch the real-time console show progress
-5. Wait for sync to complete
+5. Wait for sync to complete (~30 seconds for 1000 items)
 
-**First sync with 1000 items takes ~2-5 minutes**
+**Step 7b: Generate AI Tags (Optional)**
+1. In Claude Desktop chat, run:
+   ```
+   Tag my pending work items
+   ```
+2. Or use the MCP tool directly:
+   ```
+   tag_pending_work_items with batch size 20
+   ```
+3. Claude will process items in batches using AI
+4. Takes ~2-5 seconds per item for smart content analysis
+
+**Note:** Basic tags (area, iteration, type) are added during sync. AI tags provide deeper content analysis.
 
 ## Usage
 
@@ -190,15 +215,27 @@ Claude: [Finds: US-01: APOC Mobile: Dynamic Side Menu...]
 
 ### Syncing Work Items
 
-**Manual Sync:**
+**Manual Sync (Fast - No AI):**
 1. Go to **Sync** tab
 2. Select project
 3. Optionally set "From Date" to sync only recent changes
 4. Click **Start Sync**
-5. Watch real-time progress in console
+5. Watch real-time progress in console (~30 seconds for 1000 items)
+
+**Generate AI Tags (Optional):**
+After syncing, use Claude Desktop chat:
+```
+You: "Tag my pending work items with AI"
+Claude: [Processes items in batches, generates smart tags]
+```
+
+Or use the MCP tool:
+- `tag_pending_work_items` - Process 10-50 items with AI tagging
+- Batch processing prevents overwhelming the AI
+- Takes ~2-5 seconds per item for content analysis
 
 **Automatic Sync:**
-Set `SYNC_ENABLED: "true"` in config to sync automatically every hour (or custom interval).
+Set `SYNC_ENABLED: "true"` in config to sync automatically every hour (or custom interval). Note: Auto-sync does not run AI tagging automatically.
 
 ### Exporting Data
 
@@ -226,13 +263,21 @@ Set `SYNC_ENABLED: "true"` in config to sync automatically every hour (or custom
 
 Available tools when using with Claude Desktop:
 
-- `create_work_item` - Create work item in ADO and track locally
+### Core Tools
+- `create_work_item` - Create work item in ADO and track locally (with AI tags)
 - `search_work_items` - Search tracked items by keywords/tags/filters
 - `get_work_item` - Get detailed info about a specific item
-- `sync_ado` - Manually trigger sync with Azure DevOps
-- `get_sync_status` - Check sync status and last sync time
 - `list_tags` - List all available tags with usage counts
 - `launch_dashboard` - Get dashboard URL
+
+### Sync & Tagging Tools
+- `sync_ado_work_items` - **Fast sync** - Import work items without AI tagging
+- `tag_pending_work_items` - **Smart tagging** - Process items needing AI tags in batches
+- `get_sync_status` - Check sync status and last sync time
+
+**Two-Step Workflow:**
+1. Use `sync_ado_work_items` to quickly import items (~30 sec for 1000 items)
+2. Use `tag_pending_work_items` to process items with AI as needed (~2-5 sec per item)
 
 ### Example MCP Usage
 

@@ -9,9 +9,9 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { initDatabase } from './database/db.js';
 import { initAzureDevOps, createWorkItemInADO, parseWorkItemFromADO } from './api/azureDevOps.js';
-import { addWorkItem, searchWorkItems, getWorkItem, getAllTags } from './database/workItems.js';
+import { addWorkItem, searchWorkItems, getWorkItem, getAllTags, getWorkItemParent, getWorkItemChildren } from './database/workItems.js';
 import { generateTags } from './utils/aiTagging.js';
-import { syncWithAzureDevOps, getSyncStatus } from './sync/syncService.js';
+import { syncWithAzureDevOps, getSyncStatus, tagPendingWorkItems } from './sync/syncService.js';
 import { startDashboard } from './dashboard/server.js';
 
 // Configuration from environment
@@ -22,11 +22,19 @@ const DASHBOARD_PORT = parseInt(process.env.DASHBOARD_PORT) || 3738;
 const SYNC_ENABLED = process.env.SYNC_ENABLED === 'true';
 const SYNC_INTERVAL_MINUTES = parseInt(process.env.SYNC_INTERVAL_MINUTES) || 60;
 
+// Helper function to build Azure DevOps work item URL
+function buildAdoUrl(adoId) {
+  if (!ADO_ORG_URL || !ADO_PROJECT) return null;
+  // Encode the project name to handle spaces and special characters
+  const encodedProject = encodeURIComponent(ADO_PROJECT);
+  return `${ADO_ORG_URL}/${encodedProject}/_workitems/edit/${adoId}`;
+}
+
 // Initialize MCP server
 const server = new Server(
   {
     name: 'mgc-ado-tracker',
-    version: '1.0.2',
+    version: '1.3.0',
   },
   {
     capabilities: {
@@ -109,6 +117,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'Filter by iteration path (partial match)'
             },
+            parentId: {
+              type: 'string',
+              description: 'Filter by parent work item ID (returns children of this parent)'
+            },
+            hasParent: {
+              type: 'boolean',
+              description: 'Filter by parent relationship (false = orphans/top-level items, true = items with parents)'
+            },
             limit: {
               type: 'number',
               description: 'Maximum number of results (default: 20)'
@@ -131,8 +147,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
-        name: 'sync_ado',
-        description: 'Sync work items from Azure DevOps to local tracker',
+        name: 'sync_ado_work_items',
+        description: 'Sync work items from Azure DevOps to local tracker. Only fetches and stores data, does not call AI.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -150,6 +166,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           },
           required: ['projectName']
+        }
+      },
+      {
+        name: 'tag_pending_work_items',
+        description: 'Process a batch of work items that need tags using AI. Items are flagged during sync and processed here.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            batchSize: {
+              type: 'number',
+              description: 'Number of items to tag in this batch (default: 10)'
+            },
+            confidenceThreshold: {
+              type: 'number',
+              description: 'Minimum confidence score for tags (default: 0.8)'
+            }
+          }
         }
       },
       {
@@ -238,6 +271,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           state: args.state || '',
           areaPath: args.areaPath || '',
           iterationPath: args.iterationPath || '',
+          parentId: args.parentId || null,
+          hasParent: args.hasParent !== undefined ? args.hasParent : null,
           limit: args.limit || 20
         });
 
@@ -249,6 +284,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               count: results.length,
               results: results.map(item => ({
                 adoId: item.ado_id,
+                adoUrl: buildAdoUrl(item.ado_id),
                 title: item.title,
                 type: item.work_item_type,
                 state: item.state,
@@ -274,6 +310,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        // Get parent and children
+        const parentId = getWorkItemParent(args.adoId);
+        const childrenIds = getWorkItemChildren(args.adoId);
+
         return {
           content: [{
             type: 'text',
@@ -281,6 +321,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               success: true,
               workItem: {
                 adoId: item.ado_id,
+                adoUrl: buildAdoUrl(item.ado_id),
                 title: item.title,
                 description: item.description,
                 type: item.work_item_type,
@@ -292,14 +333,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 createdDate: item.created_date,
                 modifiedDate: item.modified_date,
                 tags: item.tags,
-                confidenceScores: item.confidence_scores
+                confidenceScores: item.confidence_scores,
+                parentId: parentId,
+                childrenIds: childrenIds,
+                childrenCount: childrenIds.length
               }
             }, null, 2)
           }]
         };
       }
 
-      case 'sync_ado': {
+      case 'sync_ado_work_items': {
         const result = await syncWithAzureDevOps(args.projectName, {
           fromDate: args.fromDate,
           maxItems: args.maxItems || 1000
@@ -313,7 +357,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               itemsAdded: result.itemsAdded,
               itemsUpdated: result.itemsUpdated,
               durationMs: result.durationMs,
+              errors: result.errors,
+              message: 'Sync completed. Use tag_pending_work_items to process items needing tags.'
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'tag_pending_work_items': {
+        const result = await tagPendingWorkItems({
+          batchSize: args.batchSize || 10,
+          confidenceThreshold: args.confidenceThreshold || 0.8
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: result.success,
+              itemsTagged: result.itemsTagged,
+              itemsFailed: result.itemsFailed,
+              durationMs: result.durationMs,
               errors: result.errors
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'sync_ado': {
+        // Backward compatibility: redirect to sync_ado_work_items
+        const result = await syncWithAzureDevOps(args.projectName, {
+          fromDate: args.fromDate,
+          maxItems: args.maxItems || 1000
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: result.success,
+              itemsAdded: result.itemsAdded,
+              itemsUpdated: result.itemsUpdated,
+              durationMs: result.durationMs,
+              errors: result.errors,
+              message: 'Sync completed. Note: sync_ado is deprecated, use sync_ado_work_items instead. Use tag_pending_work_items to process items needing tags.'
             }, null, 2)
           }]
         };
@@ -406,6 +493,8 @@ async function main() {
   await startDashboard(DASHBOARD_PORT);
 
   // Setup background sync if enabled
+  // Note: Background sync only syncs data, does not tag items
+  // Tagging must be done separately via tag_pending_work_items tool
   if (SYNC_ENABLED && ADO_PROJECT) {
     const intervalMs = SYNC_INTERVAL_MINUTES * 60 * 1000;
     

@@ -1,15 +1,4 @@
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; font-weight: 500; margin-bottom: 8px;">Sync Options:</label>
-                <div style="display: flex; gap: 20px; align-items: center;">
-                    <label style="display: flex; align-items: center; gap: 8px;">
-                        <input type="checkbox" id="sync-enable-ai-tags" checked />
-                        <span>Generate AI Tags (slower but smarter)</span>
-                    </label>
-                </div>
-                <p style="font-size: 13px; color: #666; margin-top: 8px;">
-                    Uncheck for faster sync - tags will be auto-generated from area/iteration only
-                </p>
-            </div><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -158,6 +147,24 @@
                 <button id="import-btn" class="secondary-btn">Import Historical Data</button>
             </div>
 
+            <div class="sync-section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">🤖 AI Tagging</h3>
+                <p style="opacity: 0.9; margin-bottom: 15px; line-height: 1.6;">
+                    After syncing, work items receive automatic <strong>hierarchy tags</strong> (orphan, top-level-feature, has-parent).<br/>
+                    Run AI tagging to add <strong>semantic tags</strong> (authentication, ui, api, etc.) for richer categorization.
+                </p>
+                <div class="form-group" style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <label style="color: white;">Items Pending AI Tagging:</label>
+                    <p id="pending-tag-count" style="font-size: 24px; font-weight: bold; margin: 10px 0; color: #ffd700;">-</p>
+                </div>
+                <div class="form-group">
+                    <label style="color: white;">Batch Size:</label>
+                    <input type="number" id="tag-batch-size" value="10" min="1" max="50" style="background: rgba(255,255,255,0.9); border: none;" />
+                    <small style="color: rgba(255,255,255,0.8); font-size: 12px;">Number of items to tag in this batch (1-50). AI tagging uses Claude and takes time.</small>
+                </div>
+                <button id="tag-btn" class="primary-btn" style="background: white; color: #667eea; font-weight: bold;">🏷️ Run AI Tagging</button>
+            </div>
+
             <div class="sync-status">
                 <h3>Sync Status</h3>
                 <div id="sync-status-content">
@@ -166,7 +173,10 @@
             </div>
 
             <div class="sync-history">
-                <h3>Sync History</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">Sync History</h3>
+                    <button id="clear-sync-history-btn" class="secondary-btn" style="font-size: 14px; padding: 8px 16px;">Clear History</button>
+                </div>
                 <div id="sync-history-content">
                     <p>Loading...</p>
                 </div>

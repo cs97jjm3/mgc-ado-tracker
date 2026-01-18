@@ -22,6 +22,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             loadSyncStatus();
             loadSyncHistory();
             prefillSyncProject();
+            loadPendingTagCount();
         } else if (tabName === 'settings') {
             loadSettings();
         }
@@ -338,6 +339,72 @@ function displayTopTags(tags) {
 // Sync functionality
 document.getElementById('sync-btn').addEventListener('click', startSync);
 document.getElementById('import-btn').addEventListener('click', startImport);
+document.getElementById('clear-sync-history-btn').addEventListener('click', clearSyncHistory);
+
+// AI Tagging functionality
+document.getElementById('tag-btn').addEventListener('click', startAITagging);
+
+async function loadPendingTagCount() {
+    try {
+        const response = await fetch('/api/stats/pending-tags');
+        const data = await response.json();
+        
+        if (data.success) {
+            const count = data.data.pendingCount || 0;
+            document.getElementById('pending-tag-count').textContent = count.toLocaleString();
+        }
+    } catch (error) {
+        console.error('Error loading pending tag count:', error);
+        document.getElementById('pending-tag-count').textContent = 'Error';
+    }
+}
+
+async function startAITagging() {
+    const batchSize = parseInt(document.getElementById('tag-batch-size').value);
+    
+    if (batchSize < 1 || batchSize > 50) {
+        alert('Batch size must be between 1 and 50');
+        return;
+    }
+    
+    const tagBtn = document.getElementById('tag-btn');
+    tagBtn.disabled = true;
+    tagBtn.textContent = '🤖 Tagging...';
+    
+    try {
+        logToConsole('info', `Starting AI tagging for ${batchSize} items...`);
+        logToConsole('separator');
+        
+        const response = await fetch('/api/tag-pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ batchSize })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            logToConsole('success', `✓ AI tagging completed!`);
+            logToConsole('info', `Items tagged: ${data.data.itemsTagged}`);
+            logToConsole('info', `Items failed: ${data.data.itemsFailed}`);
+            logToConsole('info', `Duration: ${(data.data.durationMs / 1000).toFixed(2)}s`);
+            
+            if (data.data.errors && data.data.errors.length > 0) {
+                logToConsole('warning', `Warnings: ${data.data.errors.length} items had issues`);
+            }
+            
+            // Refresh pending count
+            loadPendingTagCount();
+        } else {
+            logToConsole('error', `✗ AI tagging failed: ${data.error}`);
+        }
+    } catch (error) {
+        logToConsole('error', `✗ Error: ${error.message}`);
+    } finally {
+        tagBtn.disabled = false;
+        tagBtn.textContent = '🏷️ Run AI Tagging';
+    }
+}
 
 async function prefillSyncProject() {
     const select = document.getElementById('sync-project');
@@ -560,6 +627,44 @@ async function loadSyncHistory() {
         }
     } catch (error) {
         console.error('Error loading sync history:', error);
+    }
+}
+
+async function clearSyncHistory() {
+    if (!confirm('Clear all sync history? This cannot be undone.')) {
+        return;
+    }
+    
+    const btn = document.getElementById('clear-sync-history-btn');
+    const originalText = btn.textContent;
+    
+    try {
+        btn.disabled = true;
+        btn.textContent = 'Clearing...';
+        
+        const response = await fetch('/api/sync/history', { method: 'DELETE' });
+        const data = await response.json();
+        
+        if (data.success) {
+            btn.textContent = '✓ Cleared!';
+            btn.classList.add('success-flash');
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+                btn.classList.remove('success-flash');
+            }, 2000);
+            
+            // Reload sync history to show empty state
+            loadSyncHistory();
+        } else {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            alert(`Failed to clear history: ${data.error}`);
+        }
+    } catch (error) {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        alert(`Error: ${error.message}`);
     }
 }
 

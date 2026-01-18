@@ -1,6 +1,6 @@
 import { getDatabase, saveDatabase } from './db.js';
 
-export function addWorkItem(workItem) {
+export function addWorkItem(workItem, skipSave = false) {
   const db = getDatabase();
   
   const {
@@ -18,16 +18,54 @@ export function addWorkItem(workItem) {
     tags = [],
     confidenceScores = {},
     projectName = '',
-    rawData = {}
+    rawData = {},
+    needsTagging = null,
+    // New enhanced fields
+    acceptanceCriteria = '',
+    reproSteps = '',
+    systemInfo = '',
+    priority = null,
+    severity = '',
+    storyPoints = null,
+    businessValue = null,
+    risk = '',
+    foundInBuild = '',
+    integrationBuild = '',
+    resolvedBy = '',
+    resolvedDate = '',
+    closedBy = '',
+    closedDate = '',
+    activatedBy = '',
+    activatedDate = '',
+    stateReason = '',
+    originalEstimate = null,
+    remainingWork = null,
+    completedWork = null,
+    adoTags = ''
   } = workItem;
+
+  // If needsTagging is not explicitly set, determine based on tags
+  let shouldTag = needsTagging;
+  if (shouldTag === null || shouldTag === undefined) {
+    // Need tagging if no tags or empty tags
+    shouldTag = !tags || tags.length === 0 || 
+                (typeof tags === 'string' && (tags === '[]' || tags === ''));
+  }
 
   const stmt = db.prepare(`
     INSERT OR REPLACE INTO work_items (
       ado_id, title, description, work_item_type, state, 
       area_path, iteration_path, assigned_to, created_by,
       created_date, modified_date, tags, confidence_scores,
-      project_name, raw_data, synced_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      project_name, raw_data, synced_at, needs_tagging,
+      acceptance_criteria, repro_steps, system_info,
+      priority, severity, story_points, business_value, risk,
+      found_in_build, integration_build,
+      resolved_by, resolved_date, closed_by, closed_date,
+      activated_by, activated_date, state_reason,
+      original_estimate, remaining_work, completed_work,
+      ado_tags
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run([
@@ -46,14 +84,40 @@ export function addWorkItem(workItem) {
     JSON.stringify(confidenceScores),
     projectName,
     JSON.stringify(rawData),
-    new Date().toISOString()
+    new Date().toISOString(),
+    shouldTag ? 1 : 0,
+    acceptanceCriteria,
+    reproSteps,
+    systemInfo,
+    priority,
+    severity,
+    storyPoints,
+    businessValue,
+    risk,
+    foundInBuild,
+    integrationBuild,
+    resolvedBy,
+    resolvedDate,
+    closedBy,
+    closedDate,
+    activatedBy,
+    activatedDate,
+    stateReason,
+    originalEstimate,
+    remainingWork,
+    completedWork,
+    adoTags
   ]);
 
   stmt.free();
-  saveDatabase();
+  
+  // Only save if not batching
+  if (!skipSave) {
+    saveDatabase();
+  }
 
   // Update tag usage
-  updateTagUsage(tags);
+  updateTagUsage(tags, skipSave);
 
   return adoId;
 }
@@ -80,6 +144,8 @@ export function searchWorkItems(options = {}) {
     iterationPath = '',
     assignedTo = '',
     createdAfter = '',
+    parentId = null,
+    hasParent = null,
     limit = 100,
     offset = 0
   } = options;
@@ -88,8 +154,8 @@ export function searchWorkItems(options = {}) {
   const params = [];
 
   if (query) {
-    sql += ' AND (title LIKE ? OR description LIKE ?)';
-    params.push(`%${query}%`, `%${query}%`);
+    sql += ' AND (title LIKE ? OR description LIKE ? OR acceptance_criteria LIKE ? OR repro_steps LIKE ?)';
+    params.push(`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`);
   }
 
   if (tags.length > 0) {
@@ -128,6 +194,31 @@ export function searchWorkItems(options = {}) {
     params.push(createdAfter);
   }
 
+  // Parent/child relationship filters
+  if (parentId !== null) {
+    sql += ` AND ado_id IN (
+      SELECT source_id FROM work_item_links 
+      WHERE target_id = ? AND link_type LIKE '%Parent%'
+    )`;
+    params.push(parentId);
+  }
+
+  if (hasParent !== null) {
+    if (hasParent === false) {
+      // Find orphans - items with no parent link
+      sql += ` AND ado_id NOT IN (
+        SELECT source_id FROM work_item_links 
+        WHERE link_type LIKE '%Parent%'
+      )`;
+    } else {
+      // Find items that have a parent
+      sql += ` AND ado_id IN (
+        SELECT source_id FROM work_item_links 
+        WHERE link_type LIKE '%Parent%'
+      )`;
+    }
+  }
+
   sql += ' ORDER BY modified_date DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
@@ -158,7 +249,7 @@ export function deleteWorkItem(adoId) {
   saveDatabase();
 }
 
-export function addWorkItemLink(sourceId, targetId, linkType) {
+export function addWorkItemLink(sourceId, targetId, linkType, skipSave = false) {
   const db = getDatabase();
   
   const stmt = db.prepare(`
@@ -168,7 +259,11 @@ export function addWorkItemLink(sourceId, targetId, linkType) {
 
   stmt.run([sourceId, targetId, linkType, new Date().toISOString()]);
   stmt.free();
-  saveDatabase();
+  
+  // Only save if not batching
+  if (!skipSave) {
+    saveDatabase();
+  }
 }
 
 export function getWorkItemLinks(adoId) {
@@ -191,7 +286,36 @@ export function getWorkItemLinks(adoId) {
   }));
 }
 
-function updateTagUsage(tags) {
+export function getWorkItemParent(adoId) {
+  const db = getDatabase();
+  const result = db.exec(`
+    SELECT target_id FROM work_item_links 
+    WHERE source_id = ? AND link_type LIKE '%Parent%'
+    LIMIT 1
+  `, [adoId]);
+  
+  if (result.length === 0 || result[0].values.length === 0) {
+    return null;
+  }
+
+  return result[0].values[0][0];
+}
+
+export function getWorkItemChildren(adoId) {
+  const db = getDatabase();
+  const result = db.exec(`
+    SELECT source_id FROM work_item_links 
+    WHERE target_id = ? AND link_type LIKE '%Parent%'
+  `, [adoId]);
+  
+  if (result.length === 0) {
+    return [];
+  }
+
+  return result[0].values.map(row => row[0]);
+}
+
+function updateTagUsage(tags, skipSave = false) {
   const db = getDatabase();
   
   tags.forEach(tag => {
@@ -201,7 +325,10 @@ function updateTagUsage(tags) {
     `, [tag]);
   });
   
-  saveDatabase();
+  // Only save if not batching
+  if (!skipSave) {
+    saveDatabase();
+  }
 }
 
 export function getAllTags() {
@@ -265,7 +392,34 @@ function parseWorkItem(columns, values) {
     }
   }
 
+  // Convert needs_tagging to boolean for consistency
+  if (item.needs_tagging !== undefined) {
+    item.needs_tagging = item.needs_tagging === 1 || item.needs_tagging === true;
+  }
+
   return item;
+}
+
+export function getWorkItemsNeedingTags(limit = 50) {
+  const db = getDatabase();
+  const result = db.exec(`
+    SELECT * FROM work_items 
+    WHERE needs_tagging = 1 
+    ORDER BY modified_date DESC 
+    LIMIT ?
+  `, [limit]);
+  
+  if (result.length === 0) {
+    return [];
+  }
+
+  return result[0].values.map(row => parseWorkItem(result[0].columns, row));
+}
+
+export function markWorkItemAsTagged(adoId) {
+  const db = getDatabase();
+  db.run('UPDATE work_items SET needs_tagging = 0 WHERE ado_id = ?', [adoId]);
+  saveDatabase();
 }
 
 export function getWorkItemStats() {
@@ -289,10 +443,17 @@ export function getWorkItemStats() {
     LIMIT 10
   `)[0];
 
+  const pendingTagging = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE needs_tagging = 1
+  `)[0]?.values[0]?.[0] || 0;
+
   return {
     byType: byType.map(([type, count]) => ({ type, count })),
     byState: byState.map(([state, count]) => ({ state, count })),
     recentlyModified: recentlyModified ? 
-      recentlyModified.values.map(row => parseWorkItem(recentlyModified.columns, row)) : []
+      recentlyModified.values.map(row => parseWorkItem(recentlyModified.columns, row)) : [],
+    pendingTagging
   };
 }

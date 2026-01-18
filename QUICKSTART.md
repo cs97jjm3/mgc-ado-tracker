@@ -77,10 +77,10 @@ You should see the MGC ADO Tracker interface.
 In Claude, type:
 
 ```
-Search for work items in my tracker
+Sync work items from my project
 ```
 
-If it works, you'll see available tools including `search_work_items`.
+If it works, Claude will start syncing items.
 
 ### Create Your First Tracked Item
 
@@ -93,16 +93,25 @@ Description: "Testing the tracker installation"
 Claude will:
 1. Create it in Azure DevOps
 2. Add it to the local tracker
-3. Generate tags automatically
+3. Generate AI tags automatically
 4. Return the work item ID
 
-### Import Historical Data
+### Import Historical Data (Two Steps)
 
+**Step 1: Fast Sync (No AI)**
 1. Go to dashboard → **Sync** tab
 2. Enter your project name
-3. Click **Import Historical Data**
-4. Wait (may take a few minutes for large projects)
-5. Go to **Search** tab and search for anything!
+3. Click **Start Sync**
+4. Wait (~30 seconds for 1000 items)
+
+**Step 2: Smart Tagging (Optional)**
+1. In Claude chat, type:
+   ```
+   Tag my pending work items
+   ```
+2. Claude processes items in batches using AI
+3. Takes ~2-5 seconds per item for content analysis
+4. Go to **Search** tab and search for anything!
 
 ## Step 6: Enable Background Sync (Optional)
 
@@ -142,8 +151,11 @@ Create it manually:
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
 ### Import taking forever
-Large projects (1000+ items) take time. The dashboard shows progress.
-First import with tagging takes longer (2-5 seconds per item).
+The new two-step process is much faster:
+- **Sync**: ~30 seconds for 1000 items (no AI)
+- **Tagging**: ~2-5 seconds per item when you run AI tagging
+
+You can sync quickly and tag items later in batches as needed.
 
 ## Next Steps
 

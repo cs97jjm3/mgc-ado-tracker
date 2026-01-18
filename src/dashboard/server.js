@@ -10,8 +10,8 @@ import {
   getTagSuggestions,
   getWorkItemStats
 } from '../database/workItems.js';
-import { getDatabaseStats, backupDatabase } from '../database/db.js';
-import { syncWithAzureDevOps, importHistoricalData, getSyncStatus, getSyncHistory, getSyncProgress } from '../sync/syncService.js';
+import { getDatabaseStats, backupDatabase, getDatabase, saveDatabase } from '../database/db.js';
+import { syncWithAzureDevOps, importHistoricalData, getSyncStatus, getSyncHistory, getSyncProgress, tagPendingWorkItems } from '../sync/syncService.js';
 import { generateTags } from '../utils/aiTagging.js';
 import { getAllEnvVars } from '../utils/configManager.js';
 import { getProjects } from '../api/azureDevOps.js';
@@ -125,16 +125,17 @@ app.get('/api/stats/database', (req, res) => {
 // Sync operations
 app.post('/api/sync', async (req, res) => {
   try {
-    const { projectName, fromDate, maxItems, autoTag } = req.body;
+    const { projectName, fromDate, maxItems } = req.body;
     
     if (!projectName) {
       return res.status(400).json({ success: false, error: 'Project name required' });
     }
 
+    // Sync only fetches and stores data - no AI tagging
+    // Use /api/tags/pending to tag items separately
     const result = await syncWithAzureDevOps(projectName, {
       fromDate,
-      maxItems: maxItems || 1000,
-      autoTag: autoTag !== false
+      maxItems: maxItems || 1000
     });
 
     res.json({ success: result.success, data: result });
@@ -184,6 +185,51 @@ app.get('/api/sync/history', (req, res) => {
   }
 });
 
+// Get pending tag count
+app.get('/api/stats/pending-tags', (req, res) => {
+  try {
+    const db = getDatabase();
+    const result = db.exec(`
+      SELECT COUNT(*) as count 
+      FROM work_items 
+      WHERE needs_tagging = 1
+    `);
+    
+    const count = result[0]?.values[0]?.[0] || 0;
+    res.json({ success: true, data: { pendingCount: count } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Run AI tagging on pending items
+app.post('/api/tag-pending', async (req, res) => {
+  try {
+    const { batchSize, confidenceThreshold } = req.body;
+    
+    const result = await tagPendingWorkItems({
+      batchSize: batchSize || 10,
+      confidenceThreshold: confidenceThreshold || 0.8
+    });
+
+    res.json({ success: result.success, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Clear sync history
+app.delete('/api/sync/history', (req, res) => {
+  try {
+    const db = getDatabase();
+    db.run('DELETE FROM sync_log');
+    saveDatabase();
+    res.json({ success: true, message: 'Sync history cleared' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get sync progress (for live updates)
 app.get('/api/sync/progress', (req, res) => {
   try {
@@ -211,7 +257,7 @@ app.post('/api/database/shrink', (req, res) => {
     const sizeBefore = db.dbSizeMB;
     
     // Run VACUUM to shrink database
-    const database = require('../database/db.js').getDatabase();
+    const database = getDatabase();
     database.run('VACUUM');
     
     const dbAfter = getDatabaseStats();
@@ -300,6 +346,22 @@ app.get('/api/export/excel', (req, res) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="ado-work-items-${new Date().toISOString().split('T')[0]}.csv"`);
     res.send(csvContent);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Tag pending work items using AI
+app.post('/api/tags/pending', async (req, res) => {
+  try {
+    const { batchSize, confidenceThreshold } = req.body;
+    
+    const result = await tagPendingWorkItems({
+      batchSize: batchSize || 10,
+      confidenceThreshold: confidenceThreshold || 0.8
+    });
+
+    res.json({ success: result.success, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
