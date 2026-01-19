@@ -11,7 +11,7 @@ import { initDatabase } from './database/db.js';
 import { initAzureDevOps, createWorkItemInADO, parseWorkItemFromADO } from './api/azureDevOps.js';
 import { addWorkItem, searchWorkItems, getWorkItem, getAllTags, getWorkItemParent, getWorkItemChildren } from './database/workItems.js';
 import { generateTags } from './utils/aiTagging.js';
-import { syncWithAzureDevOps, getSyncStatus, tagPendingWorkItems } from './sync/syncService.js';
+import { syncWithAzureDevOps, getSyncStatus, tagPendingWorkItems, cleanupExcludedWorkItemTypes, startBackgroundTagging, stopBackgroundTagging, getTaggingStatus, tagAllItems, startBackgroundTagAll } from './sync/syncService.js';
 import { startDashboard } from './dashboard/server.js';
 
 // Configuration from environment
@@ -34,7 +34,7 @@ function buildAdoUrl(adoId) {
 const server = new Server(
   {
     name: 'mgc-ado-tracker',
-    version: '1.3.0',
+    version: '1.3.5',
   },
   {
     capabilities: {
@@ -183,6 +183,81 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description: 'Minimum confidence score for tags (default: 0.8)'
             }
           }
+        }
+      },
+      {
+        name: 'cleanup_excluded_work_items',
+        description: 'Delete Test Cases, Test Suites, Tasks, Shared Parameters, Test Plans, and Shared Steps from the database. These types are excluded from sync.',
+        inputSchema: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'start_background_tagging',
+        description: 'Start AI tagging in the background. Processes batches of 50 items continuously until all are tagged. Non-blocking - returns immediately.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            batchSize: {
+              type: 'number',
+              description: 'Items per batch (default: 50)'
+            },
+            confidenceThreshold: {
+              type: 'number',
+              description: 'Minimum confidence (default: 0.8)'
+            }
+          }
+        }
+      },
+      {
+        name: 'start_background_tag_all',
+        description: 'Start background AI tagging of ALL items in database (ignores needs_tagging flag). Non-blocking - returns immediately and tags everything in background.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            batchSize: {
+              type: 'number',
+              description: 'Items per batch (default: 50)'
+            },
+            confidenceThreshold: {
+              type: 'number',
+              description: 'Minimum confidence (default: 0.8)'
+            }
+          }
+        }
+      },
+      {
+        name: 'stop_background_tagging',
+        description: 'Stop background AI tagging after current batch completes',
+        inputSchema: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'tag_all_items',
+        description: 'Force AI tag ALL items in database (ignores needs_tagging flag). Use for first-time setup or re-tagging everything. Processes in batches.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            batchSize: {
+              type: 'number',
+              description: 'Items to process (default: 50)'
+            },
+            confidenceThreshold: {
+              type: 'number',
+              description: 'Minimum confidence (default: 0.8)'
+            }
+          }
+        }
+      },
+      {
+        name: 'get_tagging_status',
+        description: 'Get status of background tagging (in progress, pending count, progress)',
+        inputSchema: {
+          type: 'object',
+          properties: {}
         }
       },
       {
@@ -379,6 +454,84 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               itemsFailed: result.itemsFailed,
               durationMs: result.durationMs,
               errors: result.errors
+            }, null, 2)
+          }]
+        };
+      }
+
+      case 'cleanup_excluded_work_items': {
+        const result = cleanupExcludedWorkItemTypes();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      case 'start_background_tagging': {
+        const result = await startBackgroundTagging({
+          batchSize: args.batchSize || 50,
+          confidenceThreshold: args.confidenceThreshold || 0.8
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      case 'start_background_tag_all': {
+        const result = await startBackgroundTagAll({
+          batchSize: args.batchSize || 50,
+          confidenceThreshold: args.confidenceThreshold || 0.8
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      case 'stop_background_tagging': {
+        const result = stopBackgroundTagging();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      case 'tag_all_items': {
+        const result = await tagAllItems({
+          batchSize: args.batchSize || 50,
+          confidenceThreshold: args.confidenceThreshold || 0.8
+        });
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }]
+        };
+      }
+
+      case 'get_tagging_status': {
+        const status = getTaggingStatus();
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              status
             }, null, 2)
           }]
         };

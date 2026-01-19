@@ -3,7 +3,7 @@
   "name": "mgc-ado-tracker",
   "display_name": "MGC ADO Tracker",
   "version": "1.0.0",
-  "description": "Track Azure DevOps work items with AI-powered tagging and intelligent search",
+  "description": "Track Azure DevOps work items with AI-powered tagging and intelligent search.",
   "author": {
     "name": "James Murrell",
     "email": "murrell.james@gmail.com",

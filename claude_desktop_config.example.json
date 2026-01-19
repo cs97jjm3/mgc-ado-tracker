@@ -11,7 +11,7 @@
         "SYNC_ENABLED": "false",
         "SYNC_INTERVAL_MINUTES": "60",
         "AUTO_TAG_NEW_ITEMS": "true",
-        "TAG_CONFIDENCE_THRESHOLD": "0.7"
+        "TAG_CONFIDENCE_THRESHOLD": "0.8"
       }
     }
   }

@@ -173,6 +173,48 @@ function migrateNeedsTaggingColumn() {
   }
 }
 
+// Migration: Ensure all required tables exist
+function migrateMissingTables() {
+  try {
+    // Check and create sync_log table if missing
+    const syncLogExists = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='sync_log'`);
+    if (!syncLogExists || syncLogExists.length === 0 || !syncLogExists[0].values || syncLogExists[0].values.length === 0) {
+      console.error('Migration: Creating missing sync_log table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sync_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sync_date TEXT,
+          items_added INTEGER,
+          items_updated INTEGER,
+          items_deleted INTEGER,
+          status TEXT,
+          error_message TEXT,
+          duration_ms INTEGER
+        )
+      `);
+      saveDatabase();
+      console.error('Migration: sync_log table created');
+    }
+    
+    // Check and create user_settings table if missing
+    const userSettingsExists = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='user_settings'`);
+    if (!userSettingsExists || userSettingsExists.length === 0 || !userSettingsExists[0].values || userSettingsExists[0].values.length === 0) {
+      console.error('Migration: Creating missing user_settings table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS user_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT,
+          updated_at TEXT
+        )
+      `);
+      saveDatabase();
+      console.error('Migration: user_settings table created');
+    }
+  } catch (error) {
+    console.error('Migration error (missing tables):', error.message);
+  }
+}
+
 // Migration: Add enhanced fields for v1.3.0
 function migrateEnhancedFields() {
   try {
@@ -278,22 +320,25 @@ export async function initDatabase() {
     // Initialize SQL.js
     SQL = await initSqlJs();
 
+    // Check if database exists
+    const dbExists = fs.existsSync(DB_PATH);
+
     // Load existing database or create new
-    if (fs.existsSync(DB_PATH)) {
+    if (dbExists) {
       const buffer = fs.readFileSync(DB_PATH);
       db = new SQL.Database(buffer);
+      
+      // Run migrations on existing database
+      migrateMissingTables();
+      migrateNeedsTaggingColumn();
+      migrateEnhancedFields();
     } else {
+      // Create brand new database with full schema
       db = new SQL.Database();
+      db.exec(SCHEMA);
     }
-
-    // Create base schema (tables only, no column dependencies)
-    db.exec(SCHEMA);
     
-    // Run migrations AFTER base schema is created
-    migrateNeedsTaggingColumn();
-    migrateEnhancedFields();
-    
-    // Save initial database
+    // Save database
     saveDatabase();
     
     return db;
@@ -336,6 +381,30 @@ export function backupDatabase() {
     return backupPath;
   } catch (error) {
     console.error('Failed to backup database:', error);
+    throw error;
+  }
+}
+
+export function vacuumDatabase() {
+  try {
+    const beforeSize = fs.existsSync(DB_PATH) ? fs.statSync(DB_PATH).size : 0;
+    
+    // VACUUM reclaims unused space
+    db.exec('VACUUM');
+    
+    saveDatabase();
+    
+    const afterSize = fs.existsSync(DB_PATH) ? fs.statSync(DB_PATH).size : 0;
+    const reclaimed = beforeSize - afterSize;
+    
+    return {
+      success: true,
+      beforeSizeMB: (beforeSize / (1024 * 1024)).toFixed(2),
+      afterSizeMB: (afterSize / (1024 * 1024)).toFixed(2),
+      reclaimedMB: (reclaimed / (1024 * 1024)).toFixed(2)
+    };
+  } catch (error) {
+    console.error('Failed to vacuum database:', error);
     throw error;
   }
 }

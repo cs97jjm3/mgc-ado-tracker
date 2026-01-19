@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>🎯 MGC ADO Tracker</h1>
+            <h1>MGC ADO Tracker</h1>
             <p>Track Azure DevOps work items with AI-powered intelligence</p>
         </header>
 
@@ -24,8 +24,8 @@
         <div id="search-tab" class="tab-content active">
             <div class="search-section">
                 <input type="text" id="search-query" placeholder="Search work items..." />
-                <button id="search-btn">Search</button>
-                <button id="clear-search-btn">Clear</button>
+                <button id="search-btn" class="primary-btn">Search</button>
+                <button id="clear-search-btn" class="secondary-btn">Clear</button>
             </div>
 
             <div class="filters">
@@ -65,34 +65,32 @@
                     <h3>📦 Total Work Items</h3>
                     <p class="stat-value" id="stat-total">-</p>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="stat-card">
                     <h3>🏷️ Total Tags</h3>
                     <p class="stat-value" id="stat-tags">-</p>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="stat-card">
                     <h3>💾 Database Size</h3>
                     <p class="stat-value" id="stat-size">-</p>
                 </div>
-                <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                <div class="stat-card">
                     <h3>🔄 Last Sync</h3>
                     <p class="stat-value" id="stat-last-sync">-</p>
                 </div>
             </div>
 
             <!-- AI Insights Info -->
-            <div class="chart-section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">🤖 AI-Powered Insights</h3>
-                <p style="opacity: 0.9; margin-bottom: 10px; line-height: 1.6;">
-                    <strong>Want intelligent analysis of your work items and tags?</strong><br/>
-                    Use Claude Desktop chat to ask questions like:
-                </p>
-                <ul style="opacity: 0.9; margin: 15px 0; padding-left: 20px; line-height: 1.8;">
+            <div class="ai-tagging-panel">
+                <h2>🤖 AI-Powered Insights</h2>
+                <p><strong>Want intelligent analysis of your work items and tags?</strong><br/>
+                Use Claude Desktop chat to ask questions like:</p>
+                <ul style="margin: 15px 0; padding-left: 20px; line-height: 1.8;">
                     <li>"What are my top 5 most used tags?"</li>
                     <li>"Show me all authentication bugs"</li>
                     <li>"Did we create a story about [topic]?"</li>
                     <li>"What patterns do you see in my work?"</li>
                 </ul>
-                <p style="opacity: 0.9; font-size: 14px; margin-top: 15px;">
+                <p style="font-size: 14px; margin-top: 15px;">
                     💡 <strong>Tip:</strong> Claude can search your 1000+ work items instantly using natural language - no need to remember iterations, area paths, or exact titles!
                 </p>
             </div>
@@ -101,7 +99,7 @@
                 <h3>📊 Work Items by Type</h3>
                 <div style="margin-bottom: 15px;">
                     <label style="font-weight: 500; margin-right: 10px;">Filter by Project:</label>
-                    <select id="stats-project-filter" style="padding: 8px; border-radius: 6px; border: 2px solid #e0e6ed;">
+                    <select id="stats-project-filter" style="padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
                         <option value="">All Projects</option>
                     </select>
                 </div>
@@ -126,107 +124,118 @@
 
         <!-- Sync Tab -->
         <div id="sync-tab" class="tab-content">
-            <div class="sync-section">
-                <h3>Manual Sync</h3>
+            <div class="sync-panel">
+                <h2>Manual Sync</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 20px;">Sync work items from any project you have access to. Each project is stored separately.</p>
+                
                 <div class="form-group">
-                    <label>Project Name:</label>
+                    <label>Project Name</label>
                     <select id="sync-project">
                         <option value="">Loading projects...</option>
                     </select>
-                    <small style="color: #666; font-size: 12px;">Sync work items from any project you have access to. Each project is stored separately.</small>
                 </div>
+                
                 <div class="form-group">
-                    <label>From Date (optional):</label>
+                    <label>From Date (optional)</label>
                     <input type="date" id="sync-from-date" />
                 </div>
+                
                 <div class="form-group">
-                    <label>Max Items:</label>
-                    <input type="number" id="sync-max-items" value="1000" />
+                    <label>Max Items</label>
+                    <input type="number" id="sync-max-items" value="1000" min="1" max="5000" />
                 </div>
-                <button id="sync-btn" class="primary-btn">Start Sync</button>
-                <button id="import-btn" class="secondary-btn">Import Historical Data</button>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button id="sync-btn" class="primary-btn">Start Sync</button>
+                    <button id="import-btn" class="secondary-btn">Import Historical Data</button>
+                </div>
             </div>
 
-            <div class="sync-section" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                <h3 style="color: white; border-bottom-color: rgba(255,255,255,0.3);">🤖 AI Tagging</h3>
-                <p style="opacity: 0.9; margin-bottom: 15px; line-height: 1.6;">
-                    After syncing, work items receive automatic <strong>hierarchy tags</strong> (orphan, top-level-feature, has-parent).<br/>
-                    Run AI tagging to add <strong>semantic tags</strong> (authentication, ui, api, etc.) for richer categorization.
-                </p>
-                <div class="form-group" style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                    <label style="color: white;">Items Pending AI Tagging:</label>
-                    <p id="pending-tag-count" style="font-size: 24px; font-weight: bold; margin: 10px 0; color: #ffd700;">-</p>
+            <div class="ai-tagging-panel">
+                <h2>🤖 AI Tagging</h2>
+                <p>After syncing, work items receive automatic <strong>hierarchy tags</strong> (orphan, top-level-feature, has-parent). Run AI tagging to add <strong>semantic tags</strong> (authentication, ui, api, etc.) for richer categorization.</p>
+                
+                <div class="tagging-info">
+                    <h4>Items Pending AI Tagging</h4>
+                    <p id="pending-tag-count" style="font-size: 32px; font-weight: 700; margin: 10px 0;">0</p>
                 </div>
-                <div class="form-group">
-                    <label style="color: white;">Batch Size:</label>
-                    <input type="number" id="tag-batch-size" value="10" min="1" max="50" style="background: rgba(255,255,255,0.9); border: none;" />
-                    <small style="color: rgba(255,255,255,0.8); font-size: 12px;">Number of items to tag in this batch (1-50). AI tagging uses Claude and takes time.</small>
+                
+                <div class="batch-size-control">
+                    <label style="font-weight: 500;">Batch Size:</label>
+                    <input type="number" id="tag-batch-size" value="10" min="1" max="50" />
+                    <span style="font-size: 13px; opacity: 0.9;">Number of items to tag in this batch (1-50)</span>
                 </div>
-                <button id="tag-btn" class="primary-btn" style="background: white; color: #667eea; font-weight: bold;">🏷️ Run AI Tagging</button>
+                
+                <button id="tag-btn" class="primary-btn" style="background: white; color: #667eea; font-weight: 600;">🏷️ Run AI Tagging</button>
             </div>
 
-            <div class="sync-status">
-                <h3>Sync Status</h3>
-                <div id="sync-status-content">
-                    <p>Loading...</p>
+            <div class="sync-panel" style="margin-top: 24px;">
+                <h2>Sync Status</h2>
+                <div class="sync-status">
+                    <div id="sync-status-content">
+                        <p style="text-align: center; color: var(--text-tertiary);">Loading...</p>
+                    </div>
                 </div>
             </div>
 
             <div class="sync-history">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <h3 style="margin: 0;">Sync History</h3>
-                    <button id="clear-sync-history-btn" class="secondary-btn" style="font-size: 14px; padding: 8px 16px;">Clear History</button>
+                    <button id="clear-sync-history-btn" class="secondary-btn" style="font-size: 13px; padding: 6px 12px;">Clear History</button>
                 </div>
                 <div id="sync-history-content">
-                    <p>Loading...</p>
+                    <p style="text-align: center; color: var(--text-tertiary); padding: 20px;">Loading...</p>
                 </div>
             </div>
         </div>
 
         <!-- Settings Tab -->
         <div id="settings-tab" class="tab-content">
-            <div class="settings-section">
-                <div style="background: #e8f5e9; border: 1px solid #4caf50; padding: 16px; border-radius: 4px; margin-bottom: 24px;">
-                    <h3 style="margin-top: 0; color: #2e7d32;">ℹ️ Configuration (Read-Only)</h3>
-                    <p style="margin: 8px 0;">All settings are configured through your Claude Desktop config file.</p>
-                    <p style="margin: 8px 0; font-size: 14px; color: #555;">Location: <code>C:\Users\murre\AppData\Roaming\Claude\claude_desktop_config.json</code></p>
+            <div class="sync-panel">
+                <div style="background: #f3f9ff; border-left: 4px solid var(--primary-color); padding: 16px; border-radius: var(--radius-sm); margin-bottom: 24px;">
+                    <h3 style="margin-top: 0; color: var(--primary-dark);">ℹ️ Configuration (Read-Only)</h3>
+                    <p style="margin: 8px 0; color: var(--text-secondary);">All settings are configured through your Claude Desktop config file.</p>
+                    <p style="margin: 8px 0; font-size: 13px; color: var(--text-tertiary);">
+                        <strong>Location:</strong> <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px;">C:\Users\murre\AppData\Roaming\Claude\claude_desktop_config.json</code>
+                    </p>
                 </div>
                 
-                <h3>Current Configuration</h3>
-                <div style="background: #f5f5f5; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
-                    <div style="margin-bottom: 12px;">
+                <h2>Current Configuration</h2>
+                <div class="sync-status" style="margin-bottom: 24px;">
+                    <div class="sync-status-item">
                         <strong>Organization URL:</strong>
-                        <p id="config-org-url" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="config-org-url">Loading...</span>
                     </div>
-                    <div style="margin-bottom: 12px;">
+                    <div class="sync-status-item">
                         <strong>Project:</strong>
-                        <p id="config-project" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="config-project">Loading...</span>
                     </div>
-                    <div style="margin-bottom: 12px;">
+                    <div class="sync-status-item">
                         <strong>Dashboard Port:</strong>
-                        <p id="config-port" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="config-port">Loading...</span>
                     </div>
-                    <div style="margin-bottom: 12px;">
+                    <div class="sync-status-item">
                         <strong>Background Sync:</strong>
-                        <p id="config-sync" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="config-sync">Loading...</span>
                     </div>
-                    <div style="margin-bottom: 12px;">
+                    <div class="sync-status-item">
                         <strong>Auto-Tag:</strong>
-                        <p id="config-autotag" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="config-autotag">Loading...</span>
                     </div>
                 </div>
 
-                <h3>Database</h3>
-                <div style="background: #f5f5f5; padding: 16px; border-radius: 4px; margin-bottom: 20px;">
-                    <div style="margin-bottom: 12px;">
+                <h2>Database</h2>
+                <div class="sync-status" style="margin-bottom: 24px;">
+                    <div class="sync-status-item">
                         <strong>Location:</strong>
-                        <p id="db-location" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="db-location">Loading...</span>
                     </div>
-                    <div style="margin-bottom: 12px;">
+                    <div class="sync-status-item">
                         <strong>Size:</strong>
-                        <p id="db-size-display" style="margin: 4px 0; color: #666;">Loading...</p>
+                        <span id="db-size-display">Loading...</span>
                     </div>
                 </div>
+                
                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <button id="backup-btn" class="secondary-btn">Backup Database</button>
                     <button id="shrink-btn" class="secondary-btn">Shrink Database</button>
@@ -238,25 +247,27 @@
         </div>
     </div>
 
+    <!-- Modal -->
     <div id="modal" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
+            <span class="close" style="float: right; font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-tertiary);">&times;</span>
             <div id="modal-body"></div>
         </div>
     </div>
 
+    <!-- Sync Console Modal -->
     <div id="sync-console-modal" class="modal">
         <div class="modal-content" style="max-width: 1000px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 style="margin: 0;">🔄 Sync Console</h2>
-                <span class="close" id="sync-console-close">&times;</span>
+                <span class="close" id="sync-console-close" style="font-size: 28px; font-weight: bold; cursor: pointer; color: var(--text-tertiary);">&times;</span>
             </div>
             <div id="sync-progress" style="margin-bottom: 20px;">
-                <div style="background: #e0e6ed; border-radius: 10px; height: 30px; overflow: hidden;">
-                    <div id="sync-progress-bar" style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;"></div>
+                <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); height: 36px; overflow: hidden;">
+                    <div id="sync-progress-bar" style="background: var(--primary-color); height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;"></div>
                 </div>
             </div>
-            <div id="sync-console" style="background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; height: 400px; overflow-y: auto; line-height: 1.6;">
+            <div id="sync-console" style="background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: var(--radius-md); font-family: 'Courier New', monospace; font-size: 13px; height: 400px; overflow-y: auto; line-height: 1.6;">
                 <div style="color: #4ec9b0;">[SYNC] Initializing...</div>
             </div>
             <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
@@ -265,52 +276,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Help Modal -->
-    <div id="help-modal" class="modal">
-        <div class="modal-content" style="max-width: 700px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin: 0;">❓ Quick Help</h2>
-                <span class="close" id="help-close">&times;</span>
-            </div>
-            <div style="line-height: 1.8;">
-                <h3>🔍 Search Tab</h3>
-                <p>Find work items by keywords, tags, or filters. Try natural searches like "authentication bug" or "mobile feature".</p>
-                
-                <h3>📊 Statistics Tab</h3>
-                <p>View charts and breakdowns by type, state, and project. Filter by project to see specific area stats.</p>
-                
-                <h3>🔄 Sync Tab</h3>
-                <p>Import work items from Azure DevOps. Select a project and click <strong>Start Sync</strong>. Watch real-time progress in the console.</p>
-                
-                <h3>🤖 AI-Powered Search</h3>
-                <p><strong>Use Claude Desktop chat</strong> for intelligent search:</p>
-                <ul>
-                    <li>"Did we create a story about [topic]?"</li>
-                    <li>"Show me all authentication bugs"</li>
-                    <li>"What are my top 5 most used tags?"</li>
-                </ul>
-                <p>Claude searches your work items instantly using natural language!</p>
-                
-                <h3>💾 Database</h3>
-                <p><strong>Settings tab:</strong></p>
-                <ul>
-                    <li><strong>Backup:</strong> Create a backup copy</li>
-                    <li><strong>Shrink:</strong> Reclaim unused space</li>
-                    <li><strong>Export:</strong> Download as CSV or Excel</li>
-                </ul>
-                
-                <h3>🔗 Work Item Links</h3>
-                <p>Click any work item to see details. Click the ID link (🔗) to open in Azure DevOps.</p>
-            </div>
-            <div style="margin-top: 20px; text-align: center;">
-                <button id="help-close-btn" class="primary-btn">Got It!</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Floating Help Button -->
-    <button class="help-button" id="help-btn" title="Help & Tips">❓</button>
 
     <script src="/js/app.js"></script>
 </body>

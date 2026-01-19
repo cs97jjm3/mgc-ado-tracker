@@ -951,3 +951,67 @@ async function loadProjectFilter() {
         console.error('Error loading projects:', error);
     }
 }
+
+// Database management buttons
+document.getElementById('shrink-btn').addEventListener('click', async () => {
+    if (!confirm('Shrink database? This will reclaim unused space but may take a moment.')) {
+        return;
+    }
+    
+    const btn = document.getElementById('shrink-btn');
+    btn.disabled = true;
+    btn.textContent = 'Shrinking...';
+    
+    try {
+        const response = await fetch('/api/database/shrink', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`Database shrunk!\n\nBefore: ${data.data.beforeSizeMB}MB\nAfter: ${data.data.afterSizeMB}MB\nReclaimed: ${data.data.reclaimedMB}MB`);
+            loadSettings(); // Refresh stats
+        } else {
+            alert('Shrink failed: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Shrink Database';
+    }
+});
+
+document.getElementById('backup-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('backup-btn');
+    btn.disabled = true;
+    btn.textContent = 'Creating backup...';
+    
+    try {
+        const response = await fetch('/api/backup', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`Backup created successfully!\n\nLocation: ${data.data.backupPath}`);
+        } else {
+            alert('Backup failed: ' + data.error);
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Backup Database';
+    }
+});
+
+document.getElementById('export-csv-btn').addEventListener('click', () => {
+    window.location.href = '/api/export/csv';
+});
+
+document.getElementById('export-excel-btn').addEventListener('click', () => {
+    window.location.href = '/api/export/excel';
+});
+
+document.getElementById('refresh-stats-btn').addEventListener('click', () => {
+    loadStats();
+    loadSettings();
+    alert('Stats refreshed!');
+});

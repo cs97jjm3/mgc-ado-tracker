@@ -10,7 +10,7 @@ import {
   getTagSuggestions,
   getWorkItemStats
 } from '../database/workItems.js';
-import { getDatabaseStats, backupDatabase, getDatabase, saveDatabase } from '../database/db.js';
+import { getDatabaseStats, backupDatabase, getDatabase, saveDatabase, vacuumDatabase } from '../database/db.js';
 import { syncWithAzureDevOps, importHistoricalData, getSyncStatus, getSyncHistory, getSyncProgress, tagPendingWorkItems } from '../sync/syncService.js';
 import { generateTags } from '../utils/aiTagging.js';
 import { getAllEnvVars } from '../utils/configManager.js';
@@ -253,26 +253,8 @@ app.post('/api/backup', (req, res) => {
 // Shrink database (VACUUM)
 app.post('/api/database/shrink', (req, res) => {
   try {
-    const db = getDatabaseStats();
-    const sizeBefore = db.dbSizeMB;
-    
-    // Run VACUUM to shrink database
-    const database = getDatabase();
-    database.run('VACUUM');
-    
-    const dbAfter = getDatabaseStats();
-    const sizeAfter = dbAfter.dbSizeMB;
-    const saved = sizeBefore - sizeAfter;
-    
-    res.json({ 
-      success: true, 
-      data: { 
-        sizeBefore, 
-        sizeAfter, 
-        saved: saved.toFixed(2),
-        message: `Database shrunk from ${sizeBefore}MB to ${sizeAfter}MB (saved ${saved.toFixed(2)}MB)`
-      } 
-    });
+    const result = vacuumDatabase();
+    res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -12,6 +12,13 @@ let syncProgress = {
   status: 'idle'
 };
 
+let taggingInProgress = false;
+let taggingProgress = {
+  current: 0,
+  total: 0,
+  status: 'idle'
+};
+
 export async function syncWithAzureDevOps(projectName, options = {}) {
   if (syncInProgress) {
     return lastSyncResult;
@@ -26,11 +33,22 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
     batchSize = 50 // Process in batches
   } = options;
 
+  // Work item types to exclude from sync
+  const excludedTypes = [
+    'Test Case',
+    'Test Suite', 
+    'Task',
+    'Shared Parameter',
+    'Test Plan',
+    'Shared Steps'
+  ];
+
   const result = {
     success: false,
     itemsAdded: 0,
     itemsUpdated: 0,
     itemsDeleted: 0,
+    itemsSkipped: 0,
     errors: [],
     durationMs: 0
   };
@@ -59,6 +77,12 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
         
         try {
         const parsedItem = parseWorkItemFromADO(adoItem);
+        
+        // Skip excluded work item types
+        if (excludedTypes.includes(parsedItem.workItemType)) {
+          result.itemsSkipped++;
+          return;
+        }
         
         // Check if item exists
         const existing = existingMap.get(parsedItem.adoId);
@@ -201,6 +225,94 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
   return result;
 }
 
+// Start background tagging of ALL items (not just pending)
+export async function startBackgroundTagAll(options = {}) {
+  if (taggingInProgress) {
+    return { success: false, message: 'Background tagging already in progress' };
+  }
+
+  const {
+    batchSize = 50,
+    confidenceThreshold = 0.8,
+    delayBetweenBatches = 5000
+  } = options;
+
+  taggingInProgress = true;
+
+  // Run in background without blocking
+  (async () => {
+    try {
+      const db = getDatabase();
+      
+      // Get total count
+      const countResult = db.exec('SELECT COUNT(*) as count FROM work_items');
+      const totalItems = countResult[0]?.values[0]?.[0] || 0;
+      
+      console.error(`Background tag all: Starting to tag ${totalItems} items...`);
+      
+      let offset = 0;
+      let processedTotal = 0;
+
+      while (taggingInProgress) {
+        // Get next batch
+        const batchResult = db.exec(`
+          SELECT * FROM work_items 
+          ORDER BY modified_date DESC
+          LIMIT ? OFFSET ?
+        `, [batchSize, offset]);
+
+        if (!batchResult || batchResult.length === 0 || !batchResult[0].values || batchResult[0].values.length === 0) {
+          console.error(`Background tag all: Complete! Tagged ${processedTotal} items total.`);
+          taggingInProgress = false;
+          break;
+        }
+
+        const columns = batchResult[0].columns;
+        const itemsToTag = batchResult[0].values.map(row => {
+          const item = {};
+          columns.forEach((col, i) => {
+            item[col] = row[i];
+          });
+          return item;
+        });
+
+        taggingProgress.total = totalItems;
+        taggingProgress.current = processedTotal;
+        taggingProgress.status = 'tagging';
+
+        console.error(`Background tag all: Processing batch ${Math.floor(offset/batchSize) + 1}, items ${offset + 1}-${offset + itemsToTag.length}...`);
+
+        // Tag this batch
+        const result = await tagAllItems({
+          batchSize: itemsToTag.length,
+          confidenceThreshold
+        });
+
+        processedTotal += result.itemsTagged;
+        console.error(`Background tag all: Tagged ${result.itemsTagged} items (${processedTotal}/${totalItems} total)`);
+
+        offset += batchSize;
+
+        // Wait before next batch
+        if (taggingInProgress) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+        }
+      }
+    } catch (error) {
+      console.error('Background tag all error:', error.message);
+      taggingInProgress = false;
+    }
+
+    taggingProgress.status = 'idle';
+  })();
+
+  return { 
+    success: true, 
+    message: 'Background tag all started - will tag ALL items in database',
+    note: 'Use getTaggingStatus() to check progress.'
+  };
+}
+
 export async function importHistoricalData(projectName, options = {}) {
   
   const {
@@ -326,12 +438,65 @@ export function getSyncProgress() {
   };
 }
 
+// Clean up excluded work item types from database
+export function cleanupExcludedWorkItemTypes() {
+  const db = getDatabase();
+  
+  const excludedTypes = [
+    'Test Case',
+    'Test Suite',
+    'Task',
+    'Shared Parameter',
+    'Test Plan',
+    'Shared Steps'
+  ];
+  
+  const placeholders = excludedTypes.map(() => '?').join(',');
+  
+  const result = db.exec(`
+    SELECT COUNT(*) as count FROM work_items 
+    WHERE work_item_type IN (${placeholders})
+  `, excludedTypes);
+  
+  const count = result[0]?.values[0]?.[0] || 0;
+  
+  if (count > 0) {
+    // Delete the excluded work items
+    db.exec(`
+      DELETE FROM work_items 
+      WHERE work_item_type IN (${placeholders})
+    `, excludedTypes);
+    
+    // Clean up orphaned links
+    db.exec(`
+      DELETE FROM work_item_links
+      WHERE source_id NOT IN (SELECT ado_id FROM work_items)
+         OR target_id NOT IN (SELECT ado_id FROM work_items)
+    `);
+    
+    saveDatabase();
+    
+    return {
+      success: true,
+      itemsDeleted: count,
+      message: `Deleted ${count} excluded work items (${excludedTypes.join(', ')})`
+    };
+  }
+  
+  return {
+    success: true,
+    itemsDeleted: 0,
+    message: 'No excluded work items found'
+  };
+}
+
 // Tag pending work items using AI
 // This function processes items that are flagged for tagging and generates tags using AI
 export async function tagPendingWorkItems(options = {}) {
   const {
     batchSize = 10,
-    confidenceThreshold = 0.8
+    confidenceThreshold = 0.8,
+    concurrency = 5  // Process 5 items at a time in parallel
   } = options;
 
   const result = {
@@ -354,60 +519,105 @@ export async function tagPendingWorkItems(options = {}) {
       return result;
     }
 
-    // Process items in parallel (but limit concurrency to avoid overwhelming AI)
-    const taggingPromises = itemsToTag.map(async (item) => {
-      try {
-        // Convert database item to work item format for tagging
-        const workItem = {
-          adoId: item.ado_id,
-          title: item.title,
-          description: item.description || '',
-          acceptanceCriteria: item.acceptance_criteria || '',
-          reproSteps: item.repro_steps || '',
-          workItemType: item.work_item_type,
-          state: item.state,
-          areaPath: item.area_path,
-          iterationPath: item.iteration_path
-        };
+    // Process items in batches with controlled concurrency
+    for (let i = 0; i < itemsToTag.length; i += concurrency) {
+      const batch = itemsToTag.slice(i, Math.min(i + concurrency, itemsToTag.length));
+      
+      // Process this batch in parallel
+      const taggingPromises = batch.map(async (item) => {
+        try {
+          // Convert database item to work item format for tagging
+          const workItem = {
+            adoId: item.ado_id,
+            title: item.title,
+            description: item.description || '',
+            acceptanceCriteria: item.acceptance_criteria || '',
+            reproSteps: item.repro_steps || '',
+            workItemType: item.work_item_type,
+            state: item.state,
+            areaPath: item.area_path,
+            iterationPath: item.iteration_path
+          };
 
-        // Generate tags using AI
-        const { tags, confidenceScores } = await generateTagsWithAI(workItem, {
-          confidenceThreshold,
-          useAI: true
-        });
+          // Generate tags using AI
+          const { tags, confidenceScores } = await generateTagsWithAI(workItem, {
+            confidenceThreshold,
+            useAI: true
+          });
 
-        // Update work item with tags
-        addWorkItem({
-          adoId: item.ado_id,
-          title: item.title,
-          description: item.description || '',
-          workItemType: item.work_item_type,
-          state: item.state,
-          areaPath: item.area_path,
-          iterationPath: item.iteration_path,
-          assignedTo: item.assigned_to || '',
-          createdBy: item.created_by || '',
-          createdDate: item.created_date,
-          modifiedDate: item.modified_date,
-          tags,
-          confidenceScores,
-          projectName: item.project_name || '',
-          rawData: item.raw_data || {},
-          needsTagging: false // Mark as tagged
-        });
+          // Merge with existing hierarchy tags
+          let existingTags = [];
+          if (item.tags) {
+            try {
+              existingTags = typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags;
+            } catch (e) {
+              existingTags = [];
+            }
+          }
+          
+          // Combine and deduplicate tags
+          const combinedTags = [...new Set([...existingTags, ...tags])];
 
-        result.itemsTagged++;
-      } catch (error) {
-        console.error(`Error tagging work item ${item.ado_id}:`, error.message);
-        result.itemsFailed++;
-        result.errors.push({
-          adoId: item.ado_id,
-          error: error.message
-        });
-      }
-    });
+          // Update work item with merged tags
+          addWorkItem({
+            adoId: item.ado_id,
+            title: item.title,
+            description: item.description || '',
+            workItemType: item.work_item_type,
+            state: item.state,
+            areaPath: item.area_path,
+            iterationPath: item.iteration_path,
+            assignedTo: item.assigned_to || '',
+            createdBy: item.created_by || '',
+            createdDate: item.created_date,
+            modifiedDate: item.modified_date,
+            tags: combinedTags,
+            confidenceScores,
+            projectName: item.project_name || '',
+            rawData: item.raw_data || {},
+            needsTagging: false, // Mark as tagged
+            
+            // Include all enhanced fields
+            acceptanceCriteria: item.acceptance_criteria || '',
+            reproSteps: item.repro_steps || '',
+            systemInfo: item.system_info || '',
+            priority: item.priority,
+            severity: item.severity || '',
+            storyPoints: item.story_points,
+            businessValue: item.business_value,
+            risk: item.risk || '',
+            foundInBuild: item.found_in_build || '',
+            integrationBuild: item.integration_build || '',
+            resolvedBy: item.resolved_by || '',
+            resolvedDate: item.resolved_date || '',
+            closedBy: item.closed_by || '',
+            closedDate: item.closed_date || '',
+            activatedBy: item.activated_by || '',
+            activatedDate: item.activated_date || '',
+            stateReason: item.state_reason || '',
+            originalEstimate: item.original_estimate,
+            remainingWork: item.remaining_work,
+            completedWork: item.completed_work,
+            adoTags: item.ado_tags || ''
+          });
 
-    await Promise.all(taggingPromises);
+          result.itemsTagged++;
+        } catch (error) {
+          console.error(`Error tagging work item ${item.ado_id}:`, error.message);
+          result.itemsFailed++;
+          result.errors.push({
+            adoId: item.ado_id,
+            error: error.message
+          });
+        }
+      });
+
+      // Wait for this batch to complete before starting next batch
+      await Promise.all(taggingPromises);
+      
+      // Save after each batch
+      saveDatabase();
+    }
 
     result.success = true;
     result.durationMs = Date.now() - startTime;
@@ -417,6 +627,250 @@ export async function tagPendingWorkItems(options = {}) {
     result.errors.push({ error: error.message });
     result.durationMs = Date.now() - startTime;
     console.error('Tagging failed:', error.message);
+  }
+
+  return result;
+}
+
+// Start background AI tagging that runs continuously
+export async function startBackgroundTagging(options = {}) {
+  if (taggingInProgress) {
+    return { success: false, message: 'Background tagging already in progress' };
+  }
+
+  const {
+    batchSize = 50,
+    confidenceThreshold = 0.8,
+    delayBetweenBatches = 5000 // 5 seconds between batches
+  } = options;
+
+  taggingInProgress = true;
+
+  // Run in background without blocking
+  (async () => {
+    try {
+      while (taggingInProgress) {
+        // Get pending items
+        const itemsToTag = getWorkItemsNeedingTags(batchSize);
+        
+        if (itemsToTag.length === 0) {
+          console.error('Background tagging: No more items to tag, stopping');
+          taggingInProgress = false;
+          break;
+        }
+
+        taggingProgress.total = itemsToTag.length;
+        taggingProgress.current = 0;
+        taggingProgress.status = 'tagging';
+
+        console.error(`Background tagging: Processing ${itemsToTag.length} items...`);
+
+        // Tag this batch
+        const result = await tagPendingWorkItems({
+          batchSize: itemsToTag.length,
+          confidenceThreshold
+        });
+
+        console.error(`Background tagging: Tagged ${result.itemsTagged} items, ${result.itemsFailed} failed`);
+
+        // Check if we should continue
+        const remaining = getWorkItemsNeedingTags(1);
+        if (remaining.length === 0) {
+          console.error('Background tagging: Complete!');
+          taggingInProgress = false;
+          break;
+        }
+
+        // Wait before next batch
+        if (taggingInProgress) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
+        }
+      }
+    } catch (error) {
+      console.error('Background tagging error:', error.message);
+      taggingInProgress = false;
+    }
+
+    taggingProgress.status = 'idle';
+  })();
+
+  return { 
+    success: true, 
+    message: 'Background tagging started',
+    note: 'Tagging will continue in background. Use getTaggingStatus() to check progress.'
+  };
+}
+
+export function stopBackgroundTagging() {
+  if (!taggingInProgress) {
+    return { success: false, message: 'No background tagging in progress' };
+  }
+
+  taggingInProgress = false;
+  return { success: true, message: 'Background tagging will stop after current batch' };
+}
+
+export function getTaggingStatus() {
+  const db = getDatabase();
+  const result = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE needs_tagging = 1
+  `);
+  
+  const pendingCount = result[0]?.values[0]?.[0] || 0;
+
+  return {
+    inProgress: taggingInProgress,
+    progress: taggingProgress,
+    pendingCount
+  };
+}
+
+// Force tag ALL items (ignore needs_tagging flag)
+export async function tagAllItems(options = {}) {
+  const {
+    batchSize = 50,
+    confidenceThreshold = 0.8,
+    concurrency = 5
+  } = options;
+
+  const result = {
+    success: false,
+    itemsTagged: 0,
+    itemsFailed: 0,
+    errors: [],
+    durationMs: 0
+  };
+
+  const startTime = Date.now();
+
+  try {
+    // Get ALL items regardless of needs_tagging flag
+    const db = getDatabase();
+    const allItemsResult = db.exec(`
+      SELECT * FROM work_items 
+      ORDER BY modified_date DESC
+      LIMIT ?
+    `, [batchSize]);
+
+    if (!allItemsResult || allItemsResult.length === 0 || !allItemsResult[0].values) {
+      result.success = true;
+      result.durationMs = Date.now() - startTime;
+      return result;
+    }
+
+    const columns = allItemsResult[0].columns;
+    const itemsToTag = allItemsResult[0].values.map(row => {
+      const item = {};
+      columns.forEach((col, i) => {
+        item[col] = row[i];
+      });
+      return item;
+    });
+
+    if (itemsToTag.length === 0) {
+      result.success = true;
+      result.durationMs = Date.now() - startTime;
+      return result;
+    }
+
+    console.error(`Force tagging ${itemsToTag.length} items...`);
+
+    // Process items in batches with controlled concurrency
+    for (let i = 0; i < itemsToTag.length; i += concurrency) {
+      const batch = itemsToTag.slice(i, Math.min(i + concurrency, itemsToTag.length));
+      
+      const taggingPromises = batch.map(async (item) => {
+        try {
+          const workItem = {
+            adoId: item.ado_id,
+            title: item.title,
+            description: item.description || '',
+            acceptanceCriteria: item.acceptance_criteria || '',
+            reproSteps: item.repro_steps || '',
+            workItemType: item.work_item_type,
+            state: item.state,
+            areaPath: item.area_path,
+            iterationPath: item.iteration_path
+          };
+
+          const { tags, confidenceScores } = await generateTagsWithAI(workItem, {
+            confidenceThreshold,
+            useAI: true
+          });
+
+          // Merge with existing tags
+          let existingTags = [];
+          if (item.tags) {
+            try {
+              existingTags = typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags;
+            } catch (e) {
+              existingTags = [];
+            }
+          }
+          
+          const combinedTags = [...new Set([...existingTags, ...tags])];
+
+          addWorkItem({
+            adoId: item.ado_id,
+            title: item.title,
+            description: item.description || '',
+            workItemType: item.work_item_type,
+            state: item.state,
+            areaPath: item.area_path,
+            iterationPath: item.iteration_path,
+            assignedTo: item.assigned_to || '',
+            createdBy: item.created_by || '',
+            createdDate: item.created_date,
+            modifiedDate: item.modified_date,
+            tags: combinedTags,
+            confidenceScores,
+            projectName: item.project_name || '',
+            rawData: item.raw_data || {},
+            needsTagging: false,
+            acceptanceCriteria: item.acceptance_criteria || '',
+            reproSteps: item.repro_steps || '',
+            systemInfo: item.system_info || '',
+            priority: item.priority,
+            severity: item.severity || '',
+            storyPoints: item.story_points,
+            businessValue: item.business_value,
+            risk: item.risk || '',
+            foundInBuild: item.found_in_build || '',
+            integrationBuild: item.integration_build || '',
+            resolvedBy: item.resolved_by || '',
+            resolvedDate: item.resolved_date || '',
+            closedBy: item.closed_by || '',
+            closedDate: item.closed_date || '',
+            activatedBy: item.activated_by || '',
+            activatedDate: item.activated_date || '',
+            stateReason: item.state_reason || '',
+            originalEstimate: item.original_estimate,
+            remainingWork: item.remaining_work,
+            completedWork: item.completed_work,
+            adoTags: item.ado_tags || ''
+          });
+
+          result.itemsTagged++;
+        } catch (error) {
+          console.error(`Error tagging ${item.ado_id}:`, error.message);
+          result.itemsFailed++;
+          result.errors.push({ adoId: item.ado_id, error: error.message });
+        }
+      });
+
+      await Promise.all(taggingPromises);
+      saveDatabase();
+    }
+
+    result.success = true;
+    result.durationMs = Date.now() - startTime;
+
+  } catch (error) {
+    result.success = false;
+    result.errors.push({ error: error.message });
+    result.durationMs = Date.now() - startTime;
   }
 
   return result;
