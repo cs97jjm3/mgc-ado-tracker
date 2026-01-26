@@ -449,7 +449,7 @@ export function getWorkItemStats() {
     WHERE needs_tagging = 1
   `)[0]?.values[0]?.[0] || 0;
 
-  // HIERARCHY & RELATIONSHIP STATS
+  // HIERARCHY & RELATIONSHIP STATS (PROJECT-AWARE)
   const epicCount = db.exec(`
     SELECT COUNT(*) as count 
     FROM work_items 
@@ -462,14 +462,25 @@ export function getWorkItemStats() {
     WHERE work_item_type = 'Feature'
   `)[0]?.values[0]?.[0] || 0;
 
-  const orphanCount = db.exec(`
-    SELECT COUNT(*) as count 
-    FROM work_items 
-    WHERE ado_id NOT IN (
-      SELECT source_id FROM work_item_links 
-      WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
-    )
-  `)[0]?.values[0]?.[0] || 0;
+  // PROJECT-AWARE ORPHAN COUNT: Items without parents WITHIN their own project
+  const projects = db.exec(`
+    SELECT DISTINCT project_name FROM work_items WHERE project_name IS NOT NULL
+  `)[0]?.values || [];
+  
+  let orphanCount = 0;
+  projects.forEach(([project]) => {
+    const projectOrphans = db.exec(`
+      SELECT COUNT(*) FROM work_items 
+      WHERE project_name = '${project.replace(/'/g, "''")}'
+      AND ado_id NOT IN (
+        SELECT wi.ado_id FROM work_items wi
+        INNER JOIN work_item_links wil ON wi.ado_id = wil.source_id
+        WHERE wi.project_name = '${project.replace(/'/g, "''")}'
+        AND (wil.link_type LIKE '%Parent%' OR wil.link_type LIKE '%Hierarchy-Reverse%')
+      )
+    `)[0]?.values[0]?.[0] || 0;
+    orphanCount += projectOrphans;
+  });
 
   const itemsWithChildren = db.exec(`
     SELECT COUNT(DISTINCT target_id) as count 

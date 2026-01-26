@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MGC ADO Tracker</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -76,6 +78,7 @@
 
         <!-- Statistics Tab -->
         <div id="stats-tab" class="tab-content">
+            <!-- Global Stats -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <h3>📦 Total Work Items</h3>
@@ -95,143 +98,42 @@
                 </div>
             </div>
 
-            <!-- AI Insights Info -->
-            <div class="ai-tagging-panel">
-                <h2>🤖 AI-Powered Insights</h2>
-                <p><strong>Want intelligent analysis of your work items and tags?</strong><br/>
-                Use Claude Desktop chat to ask questions like:</p>
-                <ul style="margin: 15px 0; padding-left: 20px; line-height: 1.8;">
-                    <li>"What are my top 5 most used tags?"</li>
-                    <li>"Show me all authentication bugs"</li>
-                    <li>"Did we create a story about [topic]?"</li>
-                    <li>"What patterns do you see in my work?"</li>
-                </ul>
-                <p style="font-size: 14px; margin-top: 15px;">
-                    💡 <strong>Tip:</strong> Claude can search your 1000+ work items instantly using natural language - no need to remember iterations, area paths, or exact titles!
-                </p>
-            </div>
-
-            <!-- Project Filter for ALL Stats -->
-            <div style="background: var(--bg-secondary); padding: 20px; border-radius: var(--radius-md); margin: 24px 0;">
-                <label style="font-weight: 600; font-size: 16px; margin-right: 10px;">📊 Filter All Statistics by Project:</label>
-                <select id="stats-project-filter" style="padding: 10px 16px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 14px; min-width: 250px;">
-                    <option value="">All Projects</option>
-                </select>
-                <span style="margin-left: 12px; font-size: 13px; color: var(--text-tertiary);">Applies to all stats below</span>
-            </div>
-
-            <!-- Hierarchy & Relationships -->
-            <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 24px;">
-                <div class="stat-card">
-                    <h4>🎯 Epics</h4>
-                    <p class="stat-value" id="stat-epics">-</p>
-                    <p style="font-size: 12px; color: var(--text-tertiary);">Top-level items</p>
-                </div>
-                <div class="stat-card">
-                    <h4>🎨 Features</h4>
-                    <p class="stat-value" id="stat-features">-</p>
-                    <p style="font-size: 12px; color: var(--text-tertiary);">Feature items</p>
-                </div>
-                <div class="stat-card">
-                    <h4>🔗 Orphans</h4>
-                    <p class="stat-value" id="stat-orphans">-</p>
-                    <p style="font-size: 12px; color: var(--text-tertiary);">No parent link</p>
-                </div>
-                <div class="stat-card">
-                    <h4>👪 Items with Children</h4>
-                    <p class="stat-value" id="stat-parents">-</p>
-                    <p style="font-size: 12px; color: var(--text-tertiary);">Have child items</p>
-                </div>
-                <div class="stat-card">
-                    <h4>📊 Avg Children</h4>
-                    <p class="stat-value" id="stat-avg-children">-</p>
-                    <p style="font-size: 12px; color: var(--text-tertiary);">Per parent</p>
-                </div>
-                <div class="stat-card">
-                    <h4>📏 Max Depth</h4>
-                    <p class="stat-value" id="stat-max-depth">-</p>
-                    <p style="font-size: 12px; color: var(--text-tertiary);">Hierarchy levels</p>
+            <!-- Per-Project Statistics -->
+            <div style="margin-top: 32px;">
+                <h2 style="margin-bottom: 16px; font-size: 24px;">📊 Statistics by Project</h2>
+                <div id="project-stats-container">
+                    <p style="text-align: center; color: var(--text-tertiary); padding: 40px;">Loading project statistics...</p>
                 </div>
             </div>
 
-            <!-- Work Item Health -->
-            <div class="chart-section" style="margin-top: 32px;">
-                <h3>💊 Work Item Health</h3>
-                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px;">
-                    <div class="stat-card">
-                        <h4>🏷️ Tagging Progress</h4>
-                        <p class="stat-value" id="stat-tagging-progress">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);"><span id="stat-tagged-count">-</span> of <span id="stat-total-count">-</span> tagged</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>🔢 Avg Tags</h4>
-                        <p class="stat-value" id="stat-avg-tags">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Per work item</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>📝 No Description</h4>
-                        <p class="stat-value" id="stat-no-desc">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Incomplete items</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>✅ Completion Rate</h4>
-                        <p class="stat-value" id="stat-completion-rate">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Resolved/Closed</p>
-                    </div>
-                </div>
-                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px;">
-                    <div class="stat-card">
-                        <h4>⏰ Stale (30 days)</h4>
-                        <p class="stat-value" id="stat-stale-30">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Not updated</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>⏳ Stale (60 days)</h4>
-                        <p class="stat-value" id="stat-stale-60">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Not updated</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>🕐 Stale (90 days)</h4>
-                        <p class="stat-value" id="stat-stale-90">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Not updated</p>
-                    </div>
-                </div>
+            <!-- Hidden elements for compatibility with old JS code -->
+            <div style="display: none;">
+                <span id="stat-epics"></span>
+                <span id="stat-features"></span>
+                <span id="stat-orphans"></span>
+                <span id="stat-parents"></span>
+                <span id="stat-avg-children"></span>
+                <span id="stat-max-depth"></span>
+                <span id="stat-tagging-progress"></span>
+                <span id="stat-tagged-count"></span>
+                <span id="stat-total-count"></span>
+                <span id="stat-avg-tags"></span>
+                <span id="stat-no-desc"></span>
+                <span id="stat-completion-rate"></span>
+                <span id="stat-stale-30"></span>
+                <span id="stat-stale-60"></span>
+                <span id="stat-stale-90"></span>
+                <span id="stat-created-week"></span>
+                <span id="stat-created-month"></span>
+                <span id="stat-closed-week"></span>
+                <span id="stat-closed-month"></span>
+                <span id="stat-avg-age"></span>
+                <span id="stat-oldest-age"></span>
+                <span id="stat-oldest-title"></span>
+                <select id="stats-project-filter"></select>
             </div>
 
-            <!-- Time-Based Stats -->
-            <div class="chart-section" style="margin-top: 32px;">
-                <h3>📅 Activity Trends</h3>
-                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px;">
-                    <div class="stat-card">
-                        <h4>📝 Created This Week</h4>
-                        <p class="stat-value" id="stat-created-week">-</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>📅 Created This Month</h4>
-                        <p class="stat-value" id="stat-created-month">-</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>✅ Closed This Week</h4>
-                        <p class="stat-value" id="stat-closed-week">-</p>
-                    </div>
-                    <div class="stat-card">
-                        <h4>✔️ Closed This Month</h4>
-                        <p class="stat-value" id="stat-closed-month">-</p>
-                    </div>
-                </div>
-                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 16px;">
-                    <div class="stat-card">
-                        <h4>📊 Avg Age Open Items</h4>
-                        <p class="stat-value" id="stat-avg-age">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);">Days since created</p>
-                    </div>
-                    <div class="stat-card" style="cursor: pointer;" onclick="showOldestItem()">
-                        <h4>🕰️ Oldest Open Item</h4>
-                        <p class="stat-value" id="stat-oldest-age">-</p>
-                        <p style="font-size: 12px; color: var(--text-tertiary);" id="stat-oldest-title">-</p>
-                    </div>
-                </div>
-            </div>
+            <!-- Charts Section -->
 
             <div class="chart-section">
                 <h3>📊 Work Items by Type</h3>
@@ -310,9 +212,9 @@
                 </div>
             </div>
 
-            <div class="sync-history">
+            <div class="sync-panel" style="margin-top: 24px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 style="margin: 0;">Sync History</h3>
+                    <h2 style="margin: 0;">Sync History</h2>
                     <button id="clear-sync-history-btn" class="secondary-btn" style="font-size: 13px; padding: 6px 12px;">Clear History</button>
                 </div>
                 <div id="sync-history-content">
@@ -375,10 +277,11 @@
                     <button id="backup-btn" class="secondary-btn">Backup Database</button>
                     <button id="shrink-btn" class="secondary-btn">Shrink Database</button>
                     <button id="export-csv-btn" class="secondary-btn">Export to CSV</button>
-                    <button id="export-excel-btn" class="secondary-btn">Export to Excel</button>
                     <button id="refresh-stats-btn" class="secondary-btn">Refresh Stats</button>
                 </div>
             </div>
+
+
         </div>
     </div>
 

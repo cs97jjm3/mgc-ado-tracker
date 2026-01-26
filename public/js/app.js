@@ -290,17 +290,32 @@ document.getElementById('search-sort').addEventListener('change', (e) => {
 function displaySearchResults(items) {
     const resultsDiv = document.getElementById('search-results');
     
-    const html = items.map(item => `
+    // Icon mapping for work item types
+    const typeIcons = {
+        'Epic': '🎯',
+        'Feature': '📦',
+        'User Story': '📝',
+        'Task': '☑️',
+        'Bug': '🐛',
+        'Issue': '⚠️'
+    };
+    
+    const html = items.map(item => {
+        const icon = typeIcons[item.work_item_type] || '📄';
+        
+        return `
         <div class="work-item-card" onclick="showWorkItemDetails('${item.ado_id}')">
             <div class="work-item-header">
-                <div>
-                    <div class="work-item-title">${escapeHtml(item.title)}</div>
-                    <div class="work-item-id">#${item.ado_id} ${item.project_name ? `<span style="color: #999; font-size: 12px;">• ${item.project_name}</span>` : ''}</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">${icon}</span>
+                    <div>
+                        <div class="work-item-title">${escapeHtml(item.title)}</div>
+                        <div class="work-item-id">#${item.ado_id} • ${item.work_item_type} ${item.project_name ? `• <span style="color: #999; font-size: 12px;">${item.project_name}</span>` : ''}</div>
+                    </div>
                 </div>
-                <span class="tag">${item.work_item_type}</span>
+                <span class="tag" style="background: transparent; color: var(--text-secondary); padding: 4px 0; font-size: 13px;">${item.state}</span>
             </div>
             <div class="work-item-meta">
-                <span>📊 ${item.state}</span>
                 <span>📁 ${item.area_path || 'N/A'}</span>
                 <span>🔄 ${item.iteration_path || 'N/A'}</span>
             </div>
@@ -308,7 +323,8 @@ function displaySearchResults(items) {
                 ${(item.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
     
     resultsDiv.innerHTML = html;
 }
@@ -330,7 +346,21 @@ function clearSearch() {
 }
 
 async function showWorkItemDetails(adoId) {
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modal-body');
+    
     try {
+        // Show loading state in modal body BEFORE opening modal
+        modalBody.innerHTML = `
+            <div style="text-align: center; padding: 40px;">
+                <div class="loading-skeleton" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 20px;"></div>
+                <p style="color: var(--text-secondary);">Loading work item details...</p>
+            </div>
+        `;
+        
+        // Open modal after content is ready
+        modal.style.display = 'block';
+        
         const [itemResponse, settingsResponse] = await Promise.all([
             fetch(`/api/work-items/${adoId}`),
             fetch('/api/settings')
@@ -360,8 +390,25 @@ async function showWorkItemDetails(adoId) {
                 <p><strong>Assigned To:</strong> ${item.assigned_to || 'Unassigned'}</p>
                 <p><strong>Created:</strong> ${formatDate(item.created_date)} by ${item.created_by}</p>
                 <p><strong>Modified:</strong> ${formatDate(item.modified_date)}</p>
-                <h3>Description</h3>
-                <div>${item.description || 'No description'}</div>
+                ${item.work_item_type === 'Bug' ? `
+                    <h3>Repro Steps</h3>
+                    <div>${item.repro_steps || 'No repro steps provided'}</div>
+                    ${item.system_info ? `
+                        <h3>System Info</h3>
+                        <div>${item.system_info}</div>
+                    ` : ''}
+                    ${item.description ? `
+                        <h3>Additional Details</h3>
+                        <div>${item.description}</div>
+                    ` : ''}
+                ` : `
+                    <h3>${item.work_item_type === 'User Story' ? 'Description' : 'Details'}</h3>
+                    <div>${item.description || 'No description'}</div>
+                    ${item.acceptance_criteria ? `
+                        <h3>Acceptance Criteria</h3>
+                        <div>${item.acceptance_criteria}</div>
+                    ` : ''}
+                `}
                 <h3>Tags</h3>
                 <div class="work-item-tags">
                     ${(item.tags || []).map(tag => {
@@ -451,6 +498,9 @@ async function loadStats() {
         
         // Make hierarchy stat cards clickable
         makeStatsClickable();
+        
+        // Load per-project stats
+        await loadProjectStats();
     } catch (error) {
         console.error('Error loading stats:', error);
     }
@@ -1208,7 +1258,6 @@ async function clearSyncHistory() {
 document.getElementById('backup-btn').addEventListener('click', backupDatabase);
 document.getElementById('shrink-btn').addEventListener('click', shrinkDatabase);
 document.getElementById('export-csv-btn').addEventListener('click', exportCSV);
-document.getElementById('export-excel-btn').addEventListener('click', exportExcel);
 document.getElementById('refresh-stats-btn').addEventListener('click', loadStats);
 
 async function loadSettings() {
@@ -1335,27 +1384,6 @@ function exportCSV() {
     }, 500);
 }
 
-function exportExcel() {
-    const btn = document.getElementById('export-excel-btn');
-    const originalText = btn.textContent;
-    
-    btn.disabled = true;
-    btn.textContent = 'Exporting...';
-    
-    // Trigger download
-    window.location.href = '/api/export/excel';
-    
-    setTimeout(() => {
-        btn.textContent = '✓ Downloaded!';
-        btn.classList.add('success-flash');
-        setTimeout(() => {
-            btn.textContent = originalText;
-            btn.disabled = false;
-            btn.classList.remove('success-flash');
-        }, 2000);
-    }, 500);
-}
-
 // Modal
 const modal = document.getElementById('modal');
 const closeBtn = document.querySelector('.close');
@@ -1377,13 +1405,16 @@ syncConsoleClear.onclick = clearSyncConsole;
 
 // Help Modal
 const helpModal = document.getElementById('help-modal');
-const helpClose = document.getElementById('help-close');
-const helpCloseBtn = document.getElementById('help-close-btn');
 const helpBtn = document.getElementById('help-btn');
 
-helpBtn.onclick = () => helpModal.style.display = 'block';
-helpClose.onclick = () => helpModal.style.display = 'none';
-helpCloseBtn.onclick = () => helpModal.style.display = 'none';
+if (helpModal && helpBtn) {
+    const helpClose = document.getElementById('help-close');
+    const helpCloseBtn = document.getElementById('help-close-btn');
+    
+    helpBtn.onclick = () => helpModal.style.display = 'block';
+    if (helpClose) helpClose.onclick = () => helpModal.style.display = 'none';
+    if (helpCloseBtn) helpCloseBtn.onclick = () => helpModal.style.display = 'none';
+}
 
 window.onclick = (e) => {
     if (e.target === modal) modal.style.display = 'none';
@@ -1492,15 +1523,68 @@ document.getElementById('export-csv-btn').addEventListener('click', () => {
     window.location.href = '/api/export/csv';
 });
 
-document.getElementById('export-excel-btn').addEventListener('click', () => {
-    window.location.href = '/api/export/excel';
-});
-
 document.getElementById('refresh-stats-btn').addEventListener('click', () => {
     loadStats();
     loadSettings();
-    alert('Stats refreshed!');
+    ToastManager.success('Stats Refreshed', 'All statistics have been updated');
 });
+
+
+
+// ============================================
+// PER-PROJECT STATISTICS
+// ============================================
+// Load and display per-project statistics
+async function loadProjectStats() {
+    try {
+        const response = await fetch('/api/stats/by-project');
+        const data = await response.json();
+        
+        if (data.success) {
+            const container = document.getElementById('project-stats-container');
+            const projects = Object.entries(data.data).sort((a, b) => b[1].total - a[1].total);
+            
+            if (projects.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: var(--text-tertiary);">No project data available</p>';
+                return;
+            }
+            
+            const html = projects.map(([projectName, stats]) => {
+                const orphanColor = stats.orphanPercentage > 30 ? '#f48771' : stats.orphanPercentage > 20 ? '#ffa500' : '#43e97b';
+                
+                return `
+                    <div style="background: var(--bg-secondary); padding: 24px; border-radius: var(--radius-md); margin-bottom: 20px;">
+                        <h3 style="margin: 0 0 16px 0; font-size: 20px; color: var(--primary-color);">📁 ${escapeHtml(projectName)}</h3>
+                        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                            <div class="stat-card">
+                                <h4>📦 Total Items</h4>
+                                <p class="stat-value">${stats.total.toLocaleString()}</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>🎯 Epics</h4>
+                                <p class="stat-value">${stats.epics}</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>🎨 Features</h4>
+                                <p class="stat-value">${stats.features}</p>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid ${orphanColor};">
+                                <h4>🔗 Orphans</h4>
+                                <p class="stat-value">${stats.orphans.toLocaleString()}</p>
+                                <p style="font-size: 14px; color: ${orphanColor}; font-weight: 600; margin-top: 4px;">${stats.orphanPercentage}% of items</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = html;
+        }
+    } catch (error) {
+        console.error('Error loading project stats:', error);
+        document.getElementById('project-stats-container').innerHTML = '<p style="color: var(--text-danger);">Error loading project statistics</p>';
+    }
+}
 
 // Show oldest open item
 function showOldestItem() {

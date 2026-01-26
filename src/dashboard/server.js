@@ -400,6 +400,129 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
+// Diagnostic: Analyze orphans (project-aware)
+app.get('/api/diagnostics/orphans', (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    // Get all projects in database
+    const projectsResult = db.exec(`
+      SELECT DISTINCT project_name FROM work_items WHERE project_name IS NOT NULL
+    `);
+    
+    const projects = projectsResult[0] ? projectsResult[0].values.map(row => row[0]) : [];
+    
+    // Analyze orphans PER PROJECT (items without parents within their own project)
+    const orphansByProject = {};
+    let totalOrphansAcrossProjects = 0;
+    
+    projects.forEach(project => {
+      const orphansInProjectResult = db.exec(`
+        SELECT COUNT(*) FROM work_items 
+        WHERE project_name = '${project.replace(/'/g, "''")}'  
+        AND ado_id NOT IN (
+          SELECT wi.ado_id FROM work_items wi
+          INNER JOIN work_item_links wil ON wi.ado_id = wil.source_id
+          WHERE wi.project_name = '${project.replace(/'/g, "''")}'
+          AND (wil.link_type LIKE '%Parent%' OR wil.link_type LIKE '%Hierarchy-Reverse%')
+        )
+      `);
+      
+      const projectItemsResult = db.exec(`
+        SELECT COUNT(*) FROM work_items WHERE project_name = '${project.replace(/'/g, "''")}'
+      `);
+      
+      const orphanCount = orphansInProjectResult[0]?.values[0]?.[0] || 0;
+      const totalCount = projectItemsResult[0]?.values[0]?.[0] || 0;
+      
+      orphansByProject[project] = {
+        orphans: orphanCount,
+        total: totalCount,
+        percentage: totalCount > 0 ? ((orphanCount / totalCount) * 100).toFixed(1) : 0
+      };
+      
+      totalOrphansAcrossProjects += orphanCount;
+    });
+    
+    // Get orphan samples (top 100)
+    const orphansResult = db.exec(`
+      SELECT wi.ado_id, wi.title, wi.work_item_type, wi.area_path, wi.project_name
+      FROM work_items wi
+      WHERE wi.ado_id NOT IN (
+        SELECT wil.source_id FROM work_item_links wil
+        INNER JOIN work_items wi2 ON wil.source_id = wi2.ado_id
+        WHERE wi2.project_name = wi.project_name
+        AND (wil.link_type LIKE '%Parent%' OR wil.link_type LIKE '%Hierarchy-Reverse%')
+      )
+      LIMIT 100
+    `);
+    
+    const orphans = orphansResult[0] ? orphansResult[0].values.map(row => ({
+      adoId: row[0],
+      title: row[1],
+      type: row[2],
+      areaPath: row[3],
+      projectName: row[4]
+    })) : [];
+    
+    // Get link types used
+    const linkTypesResult = db.exec(`
+      SELECT DISTINCT link_type, COUNT(*) as count
+      FROM work_item_links
+      GROUP BY link_type
+      ORDER BY count DESC
+    `);
+    
+    const linkTypes = linkTypesResult[0] ? linkTypesResult[0].values.map(row => ({
+      linkType: row[0],
+      count: row[1]
+    })) : [];
+    
+    // Get orphans by area path (top 20)
+    const orphansByAreaResult = db.exec(`
+      SELECT area_path, COUNT(*) as count
+      FROM work_items wi
+      WHERE wi.ado_id NOT IN (
+        SELECT wil.source_id FROM work_item_links wil
+        INNER JOIN work_items wi2 ON wil.source_id = wi2.ado_id
+        WHERE wi2.project_name = wi.project_name
+        AND (wil.link_type LIKE '%Parent%' OR wil.link_type LIKE '%Hierarchy-Reverse%')
+      )
+      GROUP BY area_path
+      ORDER BY count DESC
+      LIMIT 20
+    `);
+    
+    const orphansByArea = orphansByAreaResult[0] ? orphansByAreaResult[0].values.map(row => ({
+      areaPath: row[0],
+      count: row[1]
+    })) : [];
+    
+    // Total counts
+    const totalItemsResult = db.exec('SELECT COUNT(*) FROM work_items');
+    const totalLinksResult = db.exec('SELECT COUNT(*) FROM work_item_links');
+    
+    res.json({ 
+      success: true, 
+      data: {
+        summary: {
+          totalItems: totalItemsResult[0]?.values[0]?.[0] || 0,
+          totalLinks: totalLinksResult[0]?.values[0]?.[0] || 0,
+          totalOrphans: totalOrphansAcrossProjects,
+          projects: projects.length,
+          note: 'Orphan count is project-aware: only items without parents WITHIN their own project'
+        },
+        orphansByProject: orphansByProject,
+        orphanSample: orphans,
+        linkTypes: linkTypes,
+        orphansByArea: orphansByArea
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Ask Claude about tags and work items
 app.post('/api/tags/ask-claude', async (req, res) => {
   try {
@@ -458,6 +581,50 @@ Provide a helpful, concise answer based on the data above. If suggesting new tag
     const answer = response.content[0].text;
     res.json({ success: true, data: { answer } });
     
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get per-project statistics
+app.get('/api/stats/by-project', (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    const projectsResult = db.exec(`SELECT DISTINCT project_name FROM work_items WHERE project_name IS NOT NULL`);
+    const projects = projectsResult[0] ? projectsResult[0].values.map(row => row[0]) : [];
+    
+    const projectStats = {};
+    
+    projects.forEach(project => {
+      const escapedProject = project.replace(/'/g, "''");
+      
+      const totalResult = db.exec(`SELECT COUNT(*) FROM work_items WHERE project_name = '${escapedProject}'`);
+      const total = totalResult[0]?.values[0]?.[0] || 0;
+      
+      const epicsResult = db.exec(`SELECT COUNT(*) FROM work_items WHERE project_name = '${escapedProject}' AND work_item_type = 'Epic'`);
+      const epics = epicsResult[0]?.values[0]?.[0] || 0;
+      
+      const featuresResult = db.exec(`SELECT COUNT(*) FROM work_items WHERE project_name = '${escapedProject}' AND work_item_type = 'Feature'`);
+      const features = featuresResult[0]?.values[0]?.[0] || 0;
+      
+      const orphansResult = db.exec(`
+        SELECT COUNT(*) FROM work_items 
+        WHERE project_name = '${escapedProject}'
+        AND ado_id NOT IN (
+          SELECT wi.ado_id FROM work_items wi
+          INNER JOIN work_item_links wil ON wi.ado_id = wil.source_id
+          WHERE wi.project_name = '${escapedProject}'
+          AND (wil.link_type LIKE '%Parent%' OR wil.link_type LIKE '%Hierarchy-Reverse%')
+        )
+      `);
+      const orphans = orphansResult[0]?.values[0]?.[0] || 0;
+      const orphanPercentage = total > 0 ? ((orphans / total) * 100).toFixed(1) : 0;
+      
+      projectStats[project] = { total, epics, features, orphans, orphanPercentage };
+    });
+    
+    res.json({ success: true, data: projectStats });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
