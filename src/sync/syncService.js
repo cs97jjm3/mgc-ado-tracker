@@ -1,7 +1,7 @@
 import { getWorkItemsFromADO, parseWorkItemFromADO } from '../api/azureDevOps.js';
 import { addWorkItem, getAllWorkItems, addWorkItemLink, getWorkItemsNeedingTags } from '../database/workItems.js';
 import { generateTagsWithAI } from '../utils/aiTagging.js';
-import { getDatabase, saveDatabase } from '../database/db.js';
+import { getDatabase, saveDatabase, reloadDatabase } from '../database/db.js';
 
 let syncInProgress = false;
 let lastSyncResult = null;
@@ -34,12 +34,12 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
   } = options;
 
   // Work item types to exclude from sync
+  // Exclude test-related items that don't use parent-child hierarchy
   const excludedTypes = [
     'Test Case',
     'Test Suite', 
-    'Task',
-    'Shared Parameter',
     'Test Plan',
+    'Shared Parameter',
     'Shared Steps'
   ];
 
@@ -126,8 +126,14 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
               if (targetId) {
                 addWorkItemLink(parsedItem.adoId, targetId, relation.rel, true); // Skip save during batch
                 
-                // Check if this is a parent link
-                if (relation.rel && relation.rel.toLowerCase().includes('parent')) {
+                // Check if this is a parent link (child->parent relationship)
+                // Azure DevOps standard hierarchy types:
+                // - "System.LinkTypes.Hierarchy-Reverse" = child pointing to parent
+                // - "System.LinkTypes.Hierarchy-Forward" = parent pointing to child
+                if (relation.rel && (
+                  relation.rel.toLowerCase().includes('parent') ||
+                  relation.rel.includes('Hierarchy-Reverse')
+                )) {
                   hasParent = true;
                   // Try to get parent type from relation attributes
                   if (relation.attributes && relation.attributes.name) {
@@ -207,6 +213,10 @@ export async function syncWithAzureDevOps(projectName, options = {}) {
 
     // Log sync result to database
     logSyncResult(result);
+    
+    // Reload database from disk to pick up all changes
+    await reloadDatabase();
+    console.error('✅ Sync complete - database reloaded');
 
   } catch (error) {
     result.success = false;

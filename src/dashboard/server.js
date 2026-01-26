@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import os from 'os';
 import {
   searchWorkItems,
   getAllWorkItems,
@@ -10,7 +12,7 @@ import {
   getTagSuggestions,
   getWorkItemStats
 } from '../database/workItems.js';
-import { getDatabaseStats, backupDatabase, getDatabase, saveDatabase, vacuumDatabase } from '../database/db.js';
+import { getDatabaseStats, backupDatabase, getDatabase, saveDatabase, vacuumDatabase, reloadDatabase } from '../database/db.js';
 import { syncWithAzureDevOps, importHistoricalData, getSyncStatus, getSyncHistory, getSyncProgress, tagPendingWorkItems } from '../sync/syncService.js';
 import { generateTags } from '../utils/aiTagging.js';
 import { getAllEnvVars } from '../utils/configManager.js';
@@ -95,8 +97,14 @@ app.get('/api/tags/suggest', (req, res) => {
 });
 
 // Get work item statistics
-app.get('/api/stats/work-items', (req, res) => {
+app.get('/api/stats/work-items', async (req, res) => {
   try {
+    // Force reload database to ensure fresh data
+    await reloadDatabase();
+    
+    const dbPath = path.join(os.homedir(), '.ado-tracker', 'database.db');
+    const dbFileTime = fs.statSync(dbPath).mtime.toISOString();
+    
     const stats = getWorkItemStats();
     const allItems = getAllWorkItems();
     
@@ -104,7 +112,10 @@ app.get('/api/stats/work-items', (req, res) => {
       success: true, 
       data: {
         ...stats,
-        allItems: allItems
+        allItems: allItems,
+        // Add timestamps for debugging
+        timestamp: new Date().toISOString(),
+        dbLastModified: dbFileTime
       }
     });
   } catch (error) {

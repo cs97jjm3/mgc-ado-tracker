@@ -1,4 +1,5 @@
 import * as azdev from 'azure-devops-node-api';
+import { WorkItemExpand } from 'azure-devops-node-api/interfaces/WorkItemTrackingInterfaces.js';
 
 let connection = null;
 let witApi = null;
@@ -62,7 +63,7 @@ export async function getWorkItemsFromADO(projectName, options = {}) {
         batchIds,
         undefined, // fields - must be undefined, not null  
         undefined, // asOf
-        'all' // expand (get relations)
+        WorkItemExpand.All // expand (get relations)
       );
       workItems.push(...batch);
     }
@@ -80,7 +81,7 @@ export async function getWorkItemByIdFromADO(id, projectName) {
   }
 
   try {
-    const workItem = await witApi.getWorkItem(id, projectName, undefined, null, 'all');
+    const workItem = await witApi.getWorkItem(id, projectName, undefined, null, WorkItemExpand.All);
     return workItem;
   } catch (error) {
     console.error(`Failed to fetch work item ${id}:`, error.message);

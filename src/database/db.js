@@ -63,7 +63,10 @@ CREATE TABLE IF NOT EXISTS work_items (
   completed_work REAL,
   
   -- ADO native tags
-  ado_tags TEXT
+  ado_tags TEXT,
+  
+  -- AI tagging flag
+  needs_tagging INTEGER DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -130,6 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_created_date ON work_items(created_date);
 CREATE INDEX IF NOT EXISTS idx_modified_date ON work_items(modified_date);
 CREATE INDEX IF NOT EXISTS idx_priority ON work_items(priority);
 CREATE INDEX IF NOT EXISTS idx_story_points ON work_items(story_points);
+CREATE INDEX IF NOT EXISTS idx_needs_tagging ON work_items(needs_tagging);
 `;
 
 // Migration: Add needs_tagging column if it doesn't exist
@@ -428,6 +432,31 @@ function cleanOldBackups() {
     });
   } catch (error) {
     console.error('Failed to clean old backups:', error);
+  }
+}
+
+export async function reloadDatabase() {
+  try {
+    console.error('Reloading database from disk...');
+    
+    if (!fs.existsSync(DB_PATH)) {
+      throw new Error('Database file not found');
+    }
+    
+    // Close existing database if open
+    if (db) {
+      db.close();
+    }
+    
+    // Reload from disk
+    const buffer = fs.readFileSync(DB_PATH);
+    db = new SQL.Database(buffer);
+    
+    console.error('Database reloaded successfully');
+    return db;
+  } catch (error) {
+    console.error('Failed to reload database:', error);
+    throw error;
   }
 }
 

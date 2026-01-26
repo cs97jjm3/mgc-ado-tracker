@@ -198,7 +198,7 @@ export function searchWorkItems(options = {}) {
   if (parentId !== null) {
     sql += ` AND ado_id IN (
       SELECT source_id FROM work_item_links 
-      WHERE target_id = ? AND link_type LIKE '%Parent%'
+      WHERE target_id = ? AND (link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%')
     )`;
     params.push(parentId);
   }
@@ -208,13 +208,13 @@ export function searchWorkItems(options = {}) {
       // Find orphans - items with no parent link
       sql += ` AND ado_id NOT IN (
         SELECT source_id FROM work_item_links 
-        WHERE link_type LIKE '%Parent%'
+        WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
       )`;
     } else {
       // Find items that have a parent
       sql += ` AND ado_id IN (
         SELECT source_id FROM work_item_links 
-        WHERE link_type LIKE '%Parent%'
+        WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
       )`;
     }
   }
@@ -290,7 +290,7 @@ export function getWorkItemParent(adoId) {
   const db = getDatabase();
   const result = db.exec(`
     SELECT target_id FROM work_item_links 
-    WHERE source_id = ? AND link_type LIKE '%Parent%'
+    WHERE source_id = ? AND (link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%')
     LIMIT 1
   `, [adoId]);
   
@@ -304,8 +304,8 @@ export function getWorkItemParent(adoId) {
 export function getWorkItemChildren(adoId) {
   const db = getDatabase();
   const result = db.exec(`
-    SELECT source_id FROM work_item_links 
-    WHERE target_id = ? AND link_type LIKE '%Parent%'
+    SELECT DISTINCT source_id FROM work_item_links 
+    WHERE target_id = ? AND (link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%')
   `, [adoId]);
   
   if (result.length === 0) {
@@ -449,11 +449,187 @@ export function getWorkItemStats() {
     WHERE needs_tagging = 1
   `)[0]?.values[0]?.[0] || 0;
 
+  // HIERARCHY & RELATIONSHIP STATS
+  const epicCount = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE work_item_type = 'Epic'
+  `)[0]?.values[0]?.[0] || 0;
+
+  const featureCount = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE work_item_type = 'Feature'
+  `)[0]?.values[0]?.[0] || 0;
+
+  const orphanCount = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE ado_id NOT IN (
+      SELECT source_id FROM work_item_links 
+      WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
+    )
+  `)[0]?.values[0]?.[0] || 0;
+
+  const itemsWithChildren = db.exec(`
+    SELECT COUNT(DISTINCT target_id) as count 
+    FROM work_item_links 
+    WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
+  `)[0]?.values[0]?.[0] || 0;
+
+  const avgChildrenPerParent = db.exec(`
+    SELECT AVG(child_count) as avg
+    FROM (
+      SELECT target_id, COUNT(*) as child_count
+      FROM work_item_links
+      WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
+      GROUP BY target_id
+    )
+  `)[0]?.values[0]?.[0] || 0;
+
+  const maxDepth = db.exec(`
+    WITH RECURSIVE hierarchy(id, depth) AS (
+      SELECT ado_id, 0
+      FROM work_items
+      WHERE ado_id NOT IN (
+        SELECT source_id FROM work_item_links 
+        WHERE link_type LIKE '%Parent%' OR link_type LIKE '%Hierarchy-Reverse%'
+      )
+      UNION ALL
+      SELECT l.source_id, h.depth + 1
+      FROM hierarchy h
+      JOIN work_item_links l ON h.id = l.target_id
+      WHERE l.link_type LIKE '%Parent%' OR l.link_type LIKE '%Hierarchy-Reverse%'
+    )
+    SELECT MAX(depth) FROM hierarchy
+  `)[0]?.values[0]?.[0] || 0;
+
+  // WORK ITEM HEALTH
+  const totalCount = db.exec('SELECT COUNT(*) FROM work_items')[0]?.values[0]?.[0] || 0;
+  const taggedCount = totalCount - pendingTagging;
+  
+  const avgTagsPerItem = db.exec(`
+    SELECT AVG(
+      LENGTH(tags) - LENGTH(REPLACE(tags, ',', '')) + 1
+    ) as avg
+    FROM work_items
+    WHERE tags != '[]' AND tags IS NOT NULL
+  `)[0]?.values[0]?.[0] || 0;
+
+  const itemsWithoutDescription = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE description IS NULL OR description = '' OR description = '""'
+  `)[0]?.values[0]?.[0] || 0;
+
+  const staleItems30 = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE modified_date < datetime('now', '-30 days')
+    AND state NOT IN ('Closed', 'Resolved')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const staleItems60 = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE modified_date < datetime('now', '-60 days')
+    AND state NOT IN ('Closed', 'Resolved')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const staleItems90 = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE modified_date < datetime('now', '-90 days')
+    AND state NOT IN ('Closed', 'Resolved')
+  `)[0]?.values[0]?.[0] || 0;
+
+  // COMPLETION RATE
+  const completedCount = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE state IN ('Resolved', 'Closed')
+  `)[0]?.values[0]?.[0] || 0;
+  
+  const completionRate = totalCount > 0 ? ((completedCount / totalCount) * 100).toFixed(1) : 0;
+
+  // TIME-BASED STATS
+  const itemsThisWeek = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE created_date >= datetime('now', '-7 days')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const itemsThisMonth = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE created_date >= datetime('now', '-30 days')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const closedThisWeek = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE closed_date >= datetime('now', '-7 days')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const closedThisMonth = db.exec(`
+    SELECT COUNT(*) as count 
+    FROM work_items 
+    WHERE closed_date >= datetime('now', '-30 days')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const avgAgeOpenItems = db.exec(`
+    SELECT AVG(
+      julianday('now') - julianday(created_date)
+    ) as avg
+    FROM work_items
+    WHERE state NOT IN ('Closed', 'Resolved')
+  `)[0]?.values[0]?.[0] || 0;
+
+  const oldestOpenItem = db.exec(`
+    SELECT ado_id, title, 
+    julianday('now') - julianday(created_date) as age_days
+    FROM work_items
+    WHERE state NOT IN ('Closed', 'Resolved')
+    ORDER BY created_date ASC
+    LIMIT 1
+  `)[0];
+
   return {
     byType: byType.map(([type, count]) => ({ type, count })),
     byState: byState.map(([state, count]) => ({ state, count })),
     recentlyModified: recentlyModified ? 
       recentlyModified.values.map(row => parseWorkItem(recentlyModified.columns, row)) : [],
-    pendingTagging
+    pendingTagging,
+    
+    // Hierarchy stats
+    epicCount,
+    featureCount,
+    orphanCount,
+    itemsWithChildren,
+    avgChildrenPerParent: Math.round(avgChildrenPerParent * 10) / 10,
+    maxHierarchyDepth: maxDepth,
+    
+    // Health stats
+    totalCount,
+    taggedCount,
+    taggingProgress: totalCount > 0 ? ((taggedCount / totalCount) * 100).toFixed(1) : 0,
+    avgTagsPerItem: Math.round(avgTagsPerItem * 10) / 10,
+    itemsWithoutDescription,
+    staleItems30Days: staleItems30,
+    staleItems60Days: staleItems60,
+    staleItems90Days: staleItems90,
+    completionRate,
+    
+    // Time-based stats
+    itemsCreatedThisWeek: itemsThisWeek,
+    itemsCreatedThisMonth: itemsThisMonth,
+    itemsClosedThisWeek: closedThisWeek,
+    itemsClosedThisMonth: closedThisMonth,
+    avgAgeOpenItems: Math.round(avgAgeOpenItems),
+    oldestOpenItem: oldestOpenItem ? {
+      id: oldestOpenItem.values[0][0],
+      title: oldestOpenItem.values[0][1],
+      ageDays: Math.round(oldestOpenItem.values[0][2])
+    } : null
   };
 }

@@ -185,6 +185,45 @@ async function loadStats() {
             // Store data globally for filtering
             window.statsData = workItemStats.data;
             
+            // Display new statistics
+            const data = workItemStats.data;
+            
+            // Hierarchy stats
+            document.getElementById('stat-epics').textContent = data.epicCount || 0;
+            document.getElementById('stat-features').textContent = data.featureCount || 0;
+            document.getElementById('stat-orphans').textContent = data.orphanCount || 0;
+            document.getElementById('stat-parents').textContent = data.itemsWithChildren || 0;
+            document.getElementById('stat-avg-children').textContent = data.avgChildrenPerParent || 0;
+            document.getElementById('stat-max-depth').textContent = data.maxHierarchyDepth || 0;
+            
+            // Health stats
+            document.getElementById('stat-tagging-progress').textContent = data.taggingProgress + '%';
+            document.getElementById('stat-tagged-count').textContent = data.taggedCount || 0;
+            document.getElementById('stat-total-count').textContent = data.totalCount || 0;
+            document.getElementById('stat-avg-tags').textContent = data.avgTagsPerItem || 0;
+            document.getElementById('stat-no-desc').textContent = data.itemsWithoutDescription || 0;
+            document.getElementById('stat-completion-rate').textContent = data.completionRate + '%';
+            document.getElementById('stat-stale-30').textContent = data.staleItems30Days || 0;
+            document.getElementById('stat-stale-60').textContent = data.staleItems60Days || 0;
+            document.getElementById('stat-stale-90').textContent = data.staleItems90Days || 0;
+            
+            // Time-based stats
+            document.getElementById('stat-created-week').textContent = data.itemsCreatedThisWeek || 0;
+            document.getElementById('stat-created-month').textContent = data.itemsCreatedThisMonth || 0;
+            document.getElementById('stat-closed-week').textContent = data.itemsClosedThisWeek || 0;
+            document.getElementById('stat-closed-month').textContent = data.itemsClosedThisMonth || 0;
+            document.getElementById('stat-avg-age').textContent = (data.avgAgeOpenItems || 0) + ' days';
+            
+            if (data.oldestOpenItem) {
+                document.getElementById('stat-oldest-age').textContent = data.oldestOpenItem.ageDays + ' days';
+                document.getElementById('stat-oldest-title').textContent = '#' + data.oldestOpenItem.id;
+                // Store for onclick handler
+                window.oldestOpenItemId = data.oldestOpenItem.id;
+            } else {
+                document.getElementById('stat-oldest-age').textContent = 'N/A';
+                document.getElementById('stat-oldest-title').textContent = 'No open items';
+            }
+            
             // Load project filter
             loadStatsProjectFilter();
             
@@ -234,7 +273,222 @@ function displayStatsCharts(projectFilter) {
         items = items.filter(item => item.project_name === projectFilter);
     }
     
-    // Calculate stats from filtered items
+    // If no project filter, use SERVER-CALCULATED stats (they're accurate)
+    // Only recalculate when filtering by project
+    if (!projectFilter) {
+        // Use server stats directly - they're already correct
+        document.getElementById('stat-epics').textContent = data.epicCount || 0;
+        document.getElementById('stat-features').textContent = data.featureCount || 0;
+        document.getElementById('stat-orphans').textContent = data.orphanCount || 0;
+        document.getElementById('stat-parents').textContent = data.itemsWithChildren || 0;
+        document.getElementById('stat-avg-children').textContent = data.avgChildrenPerParent || 0;
+        document.getElementById('stat-max-depth').textContent = data.maxHierarchyDepth || 0;
+        
+        document.getElementById('stat-tagging-progress').textContent = data.taggingProgress + '%';
+        document.getElementById('stat-tagged-count').textContent = data.taggedCount || 0;
+        document.getElementById('stat-total-count').textContent = data.totalCount || 0;
+        document.getElementById('stat-avg-tags').textContent = data.avgTagsPerItem || 0;
+        document.getElementById('stat-no-desc').textContent = data.itemsWithoutDescription || 0;
+        document.getElementById('stat-completion-rate').textContent = data.completionRate + '%';
+        document.getElementById('stat-stale-30').textContent = data.staleItems30Days || 0;
+        document.getElementById('stat-stale-60').textContent = data.staleItems60Days || 0;
+        document.getElementById('stat-stale-90').textContent = data.staleItems90Days || 0;
+        
+        document.getElementById('stat-created-week').textContent = data.itemsCreatedThisWeek || 0;
+        document.getElementById('stat-created-month').textContent = data.itemsCreatedThisMonth || 0;
+        document.getElementById('stat-closed-week').textContent = data.itemsClosedThisWeek || 0;
+        document.getElementById('stat-closed-month').textContent = data.itemsClosedThisMonth || 0;
+        document.getElementById('stat-avg-age').textContent = (data.avgAgeOpenItems || 0) + ' days';
+        
+        if (data.oldestOpenItem) {
+            document.getElementById('stat-oldest-age').textContent = data.oldestOpenItem.ageDays + ' days';
+            document.getElementById('stat-oldest-title').textContent = '#' + data.oldestOpenItem.id;
+            window.oldestOpenItemId = data.oldestOpenItem.id;
+        } else {
+            document.getElementById('stat-oldest-age').textContent = 'N/A';
+            document.getElementById('stat-oldest-title').textContent = 'No open items';
+        }
+        
+        // Calculate chart stats from filtered items
+        const byType = {};
+        const byState = {};
+        const byProject = {};
+        
+        items.forEach(item => {
+            byType[item.work_item_type] = (byType[item.work_item_type] || 0) + 1;
+            byState[item.state] = (byState[item.state] || 0) + 1;
+            if (item.project_name) {
+                byProject[item.project_name] = (byProject[item.project_name] || 0) + 1;
+            }
+        });
+        
+        const byTypeArray = Object.entries(byType).map(([type, count]) => ({ type, count }));
+        const byStateArray = Object.entries(byState).map(([state, count]) => ({ state, count }));
+        const byProjectArray = Object.entries(byProject).map(([project, count]) => ({ project, count }));
+        
+        displayChart('chart-by-type', byTypeArray);
+        displayChart('chart-by-state', byStateArray);
+        displayProjectChart('chart-by-project', byProjectArray);
+        return;
+    }
+    
+    // Recalculate ALL statistics from filtered items
+    
+    // HIERARCHY & RELATIONSHIP STATS
+    const epicCount = items.filter(item => item.work_item_type === 'Epic').length;
+    const featureCount = items.filter(item => item.work_item_type === 'Feature').length;
+    
+    // Count orphans and items with children from filtered set
+    const itemIds = new Set(items.map(item => item.ado_id));
+    const itemsWithParent = new Set();
+    const itemsWithChildren = new Set();
+    
+    // Check parent-child relationships within filtered items
+    items.forEach(item => {
+        if (item.links) {
+            item.links.forEach(link => {
+                if (link.link_type && link.link_type.toLowerCase().includes('parent')) {
+                    if (itemIds.has(link.target_id)) {
+                        itemsWithParent.add(item.ado_id);
+                        itemsWithChildren.add(link.target_id);
+                    }
+                }
+            });
+        }
+    });
+    
+    const orphanCount = items.length - itemsWithParent.size;
+    const parentCount = itemsWithChildren.size;
+    const avgChildren = parentCount > 0 ? (itemsWithParent.size / parentCount).toFixed(1) : 0;
+    
+    // WORK ITEM HEALTH
+    const totalCount = items.length;
+    const taggedCount = items.filter(item => {
+        if (!item.tags) return false;
+        try {
+            const tags = typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags;
+            return Array.isArray(tags) && tags.length > 0;
+        } catch (e) {
+            return false;
+        }
+    }).length;
+    
+    const taggingProgress = totalCount > 0 ? ((taggedCount / totalCount) * 100).toFixed(1) : 0;
+    
+    let totalTags = 0;
+    let itemsWithTags = 0;
+    items.forEach(item => {
+        if (item.tags) {
+            try {
+                const tags = typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags;
+                if (Array.isArray(tags) && tags.length > 0) {
+                    totalTags += tags.length;
+                    itemsWithTags++;
+                }
+            } catch (e) {}
+        }
+    });
+    const avgTags = itemsWithTags > 0 ? (totalTags / itemsWithTags).toFixed(1) : 0;
+    
+    const noDescCount = items.filter(item => {
+        return !item.description || item.description === '' || item.description === '""';
+    }).length;
+    
+    const completedCount = items.filter(item => 
+        item.state === 'Resolved' || item.state === 'Closed'
+    ).length;
+    const completionRate = totalCount > 0 ? ((completedCount / totalCount) * 100).toFixed(1) : 0;
+    
+    // Stale items (last 30/60/90 days)
+    const now = new Date();
+    const days30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const days60 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+    const days90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    
+    const stale30 = items.filter(item => {
+        const modDate = new Date(item.modified_date);
+        return modDate < days30 && item.state !== 'Closed' && item.state !== 'Resolved';
+    }).length;
+    
+    const stale60 = items.filter(item => {
+        const modDate = new Date(item.modified_date);
+        return modDate < days60 && item.state !== 'Closed' && item.state !== 'Resolved';
+    }).length;
+    
+    const stale90 = items.filter(item => {
+        const modDate = new Date(item.modified_date);
+        return modDate < days90 && item.state !== 'Closed' && item.state !== 'Resolved';
+    }).length;
+    
+    // TIME-BASED STATS
+    const week = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const month = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    const createdWeek = items.filter(item => new Date(item.created_date) >= week).length;
+    const createdMonth = items.filter(item => new Date(item.created_date) >= month).length;
+    const closedWeek = items.filter(item => item.closed_date && new Date(item.closed_date) >= week).length;
+    const closedMonth = items.filter(item => item.closed_date && new Date(item.closed_date) >= month).length;
+    
+    // Average age of open items
+    const openItems = items.filter(item => item.state !== 'Closed' && item.state !== 'Resolved');
+    let totalAge = 0;
+    openItems.forEach(item => {
+        const created = new Date(item.created_date);
+        const age = Math.floor((now - created) / (24 * 60 * 60 * 1000));
+        totalAge += age;
+    });
+    const avgAge = openItems.length > 0 ? Math.round(totalAge / openItems.length) : 0;
+    
+    // Oldest open item
+    let oldestItem = null;
+    let oldestAge = 0;
+    openItems.forEach(item => {
+        const created = new Date(item.created_date);
+        const age = Math.floor((now - created) / (24 * 60 * 60 * 1000));
+        if (age > oldestAge) {
+            oldestAge = age;
+            oldestItem = item;
+        }
+    });
+    
+    // UPDATE ALL STAT DISPLAYS
+    
+    // Hierarchy stats
+    document.getElementById('stat-epics').textContent = epicCount;
+    document.getElementById('stat-features').textContent = featureCount;
+    document.getElementById('stat-orphans').textContent = orphanCount;
+    document.getElementById('stat-parents').textContent = parentCount;
+    document.getElementById('stat-avg-children').textContent = avgChildren;
+    // Max depth would require recursive calculation - skip for now
+    
+    // Health stats
+    document.getElementById('stat-tagging-progress').textContent = taggingProgress + '%';
+    document.getElementById('stat-tagged-count').textContent = taggedCount;
+    document.getElementById('stat-total-count').textContent = totalCount;
+    document.getElementById('stat-avg-tags').textContent = avgTags;
+    document.getElementById('stat-no-desc').textContent = noDescCount;
+    document.getElementById('stat-completion-rate').textContent = completionRate + '%';
+    document.getElementById('stat-stale-30').textContent = stale30;
+    document.getElementById('stat-stale-60').textContent = stale60;
+    document.getElementById('stat-stale-90').textContent = stale90;
+    
+    // Time-based stats
+    document.getElementById('stat-created-week').textContent = createdWeek;
+    document.getElementById('stat-created-month').textContent = createdMonth;
+    document.getElementById('stat-closed-week').textContent = closedWeek;
+    document.getElementById('stat-closed-month').textContent = closedMonth;
+    document.getElementById('stat-avg-age').textContent = avgAge + ' days';
+    
+    if (oldestItem) {
+        document.getElementById('stat-oldest-age').textContent = oldestAge + ' days';
+        document.getElementById('stat-oldest-title').textContent = '#' + oldestItem.ado_id;
+        window.oldestOpenItemId = oldestItem.ado_id;
+    } else {
+        document.getElementById('stat-oldest-age').textContent = 'N/A';
+        document.getElementById('stat-oldest-title').textContent = 'No open items';
+    }
+    
+    // Calculate stats for charts
     const byType = {};
     const byState = {};
     const byProject = {};
@@ -1015,3 +1269,10 @@ document.getElementById('refresh-stats-btn').addEventListener('click', () => {
     loadSettings();
     alert('Stats refreshed!');
 });
+
+// Show oldest open item
+function showOldestItem() {
+    if (window.oldestOpenItemId) {
+        showWorkItemDetails(window.oldestOpenItemId);
+    }
+}
