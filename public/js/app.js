@@ -1,6 +1,180 @@
 // MGC ADO Tracker Dashboard JavaScript
 
-// Tab switching
+// ============================================
+// TOAST NOTIFICATION SYSTEM
+// ============================================
+const ToastManager = {
+    show(title, message, type = 'info', duration = 4000) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        
+        const icons = {
+            success: '✓',
+            error: '✗',
+            warning: '⚠',
+            info: 'ℹ'
+        };
+        
+        toast.innerHTML = `
+            <div class="toast-icon">${icons[type] || icons.info}</div>
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                ${message ? `<div class="toast-message">${message}</div>` : ''}
+            </div>
+            <button class="toast-close" aria-label="Close">×</button>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Close button
+        toast.querySelector('.toast-close').addEventListener('click', () => {
+            this.remove(toast);
+        });
+        
+        // Auto remove
+        if (duration > 0) {
+            setTimeout(() => this.remove(toast), duration);
+        }
+        
+        return toast;
+    },
+    
+    remove(toast) {
+        toast.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    },
+    
+    success(title, message) {
+        return this.show(title, message, 'success');
+    },
+    
+    error(title, message) {
+        return this.show(title, message, 'error', 6000);
+    },
+    
+    warning(title, message) {
+        return this.show(title, message, 'warning', 5000);
+    },
+    
+    info(title, message) {
+        return this.show(title, message, 'info');
+    }
+};
+
+// Add slideOutRight animation
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideOutRight {
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(100%); }
+    }
+`;
+document.head.appendChild(style);
+
+// ============================================
+// EMPTY STATE HELPERS
+// ============================================
+function showEmptyState(containerId, config) {
+    const container = document.getElementById(containerId);
+    const { icon = '📁', title, message, action } = config;
+    
+    let html = `
+        <div class="empty-state">
+            <div class="empty-state-icon">${icon}</div>
+            <h3>${title}</h3>
+            <p>${message}</p>
+    `;
+    
+    if (action) {
+        html += `<button class="primary-btn" onclick="${action.onClick}">${action.text}</button>`;
+    }
+    
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+// ============================================
+// SYNC STATUS INDICATOR
+// ============================================
+async function updateSyncStatusIndicator() {
+    try {
+        const response = await fetch('/api/stats/database');
+        const data = await response.json();
+        const indicator = document.getElementById('sync-status-indicator');
+        
+        if (data.success && data.data.lastSync) {
+            const lastSync = new Date(data.data.lastSync);
+            const now = new Date();
+            const diffMinutes = Math.floor((now - lastSync) / 60000);
+            
+            let timeAgo;
+            if (diffMinutes < 1) {
+                timeAgo = 'just now';
+            } else if (diffMinutes < 60) {
+                timeAgo = `${diffMinutes}m ago`;
+            } else if (diffMinutes < 1440) {
+                timeAgo = `${Math.floor(diffMinutes / 60)}h ago`;
+            } else {
+                timeAgo = `${Math.floor(diffMinutes / 1440)}d ago`;
+            }
+            
+            indicator.innerHTML = `
+                <div style="text-align: right;">
+                    <span class="status-badge synced">Synced</span>
+                    <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">Last sync: ${timeAgo}</div>
+                </div>
+            `;
+        } else {
+            indicator.innerHTML = `<span class="status-badge error">Not Synced</span>`;
+        }
+    } catch (error) {
+        console.error('Error updating sync status:', error);
+    }
+}
+
+// Update sync status on load and every 30 seconds
+document.addEventListener('DOMContentLoaded', () => {
+    updateSyncStatusIndicator();
+    setInterval(updateSyncStatusIndicator, 30000);
+});
+
+// ============================================
+// KEYBOARD SHORTCUTS
+// ============================================
+document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + K: Focus search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        document.querySelector('.tab-btn[data-tab="search"]').click();
+        setTimeout(() => document.getElementById('search-query').focus(), 100);
+        ToastManager.info('Search', 'Press Enter to search');
+    }
+    
+    // Ctrl/Cmd + S: Go to Sync tab
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        document.querySelector('.tab-btn[data-tab="sync"]').click();
+    }
+    
+    // Escape: Clear search or close modals
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('modal');
+        const syncModal = document.getElementById('sync-console-modal');
+        
+        if (modal.style.display === 'block') {
+            modal.style.display = 'none';
+        } else if (syncModal.style.display === 'block') {
+            syncModal.style.display = 'none';
+        } else if (document.querySelector('.tab-btn.active').dataset.tab === 'search') {
+            clearSearch();
+        }
+    }
+});
+
+// ============================================
+// TAB SWITCHING
+// ============================================
 document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         const tabName = btn.dataset.tab;
@@ -36,6 +210,9 @@ document.getElementById('search-query').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') performSearch();
 });
 
+// Store search results globally for sorting
+let currentSearchResults = [];
+
 async function performSearch() {
     const query = document.getElementById('search-query').value;
     const type = document.getElementById('filter-type').value;
@@ -50,28 +227,65 @@ async function performSearch() {
     if (tags.length) params.append('tags', tags.join(','));
     
     const resultsDiv = document.getElementById('search-results');
+    const headerDiv = document.getElementById('search-results-header');
     resultsDiv.innerHTML = '<p class="loading">Searching...</p>';
+    headerDiv.style.display = 'none';
     
     try {
         const response = await fetch(`/api/work-items/search?${params}`);
         const data = await response.json();
         
         if (data.success && data.data.length > 0) {
-            displaySearchResults(data.data);
+            currentSearchResults = data.data;
+            
+            // Show results header with count
+            const count = data.data.length;
+            document.getElementById('search-results-count').textContent = `Found ${count} work item${count !== 1 ? 's' : ''}`;
+            headerDiv.style.display = 'flex';
+            
+            // Reset sort dropdown
+            document.getElementById('search-sort').value = 'relevance';
+            
+            displaySearchResults(currentSearchResults);
         } else {
-            resultsDiv.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📂</div>
-                    <h3>No Work Items Found</h3>
-                    <p>No matches for your search. Try different keywords or filters.</p>
-                    <button onclick="clearSearch()" class="secondary-btn">Clear Search</button>
-                </div>
-            `;
+            headerDiv.style.display = 'none';
+            showEmptyState('search-results', {
+                icon: '📂',
+                title: 'No Work Items Found',
+                message: 'No matches for your search. Try different keywords or filters.'
+            });
         }
     } catch (error) {
+        headerDiv.style.display = 'none';
         resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
     }
 }
+
+// Sort dropdown handler
+document.getElementById('search-sort').addEventListener('change', (e) => {
+    const sortBy = e.target.value;
+    const sorted = [...currentSearchResults];
+    
+    switch(sortBy) {
+        case 'newest':
+            sorted.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+            break;
+        case 'oldest':
+            sorted.sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+            break;
+        case 'title':
+            sorted.sort((a, b) => a.title.localeCompare(b.title));
+            break;
+        case 'updated':
+            sorted.sort((a, b) => new Date(b.modified_date) - new Date(a.modified_date));
+            break;
+        default:
+            // relevance - keep original order
+            break;
+    }
+    
+    displaySearchResults(sorted);
+});
 
 function displaySearchResults(items) {
     const resultsDiv = document.getElementById('search-results');
@@ -105,14 +319,14 @@ function clearSearch() {
     document.getElementById('filter-type').value = '';
     document.getElementById('filter-state').value = '';
     document.getElementById('filter-tags').value = '';
-    document.getElementById('search-results').innerHTML = `
-        <div class="empty-state">
-            <div class="empty-state-icon">🔍</div>
-            <h3>Ready to Search</h3>
-            <p>Enter keywords, select filters, or browse by tags to find work items.<br/>
-            Try: "authentication", "mobile bug", or "side menu"</p>
-        </div>
-    `;
+    document.getElementById('search-results-header').style.display = 'none';
+    currentSearchResults = [];
+    
+    showEmptyState('search-results', {
+        icon: '🔍',
+        title: 'Ready to Search',
+        message: 'Enter keywords, select filters, or browse by tags to find work items. Try searching for "authentication", "mobile bug", or "side menu".'
+    });
 }
 
 async function showWorkItemDetails(adoId) {
@@ -234,9 +448,77 @@ async function loadStats() {
         if (tags.success) {
             displayTopTags(tags.data.slice(0, 20));
         }
+        
+        // Make hierarchy stat cards clickable
+        makeStatsClickable();
     } catch (error) {
         console.error('Error loading stats:', error);
     }
+}
+
+// ============================================
+// CLICKABLE STATS CARDS
+// ============================================
+function makeStatsClickable() {
+    // Orphans card
+    const orphansCard = document.getElementById('stat-orphans').closest('.stat-card');
+    if (orphansCard) {
+        orphansCard.style.cursor = 'pointer';
+        orphansCard.onclick = () => searchByTag('orphan');
+        orphansCard.title = 'Click to view orphan items';
+    }
+    
+    // Items with Children card
+    const parentsCard = document.getElementById('stat-parents').closest('.stat-card');
+    if (parentsCard) {
+        parentsCard.style.cursor = 'pointer';
+        parentsCard.onclick = () => searchByTag('has-parent');
+        parentsCard.title = 'Click to view items with children';
+    }
+    
+    // Epics card
+    const epicsCard = document.getElementById('stat-epics').closest('.stat-card');
+    if (epicsCard) {
+        epicsCard.style.cursor = 'pointer';
+        epicsCard.onclick = () => searchByType('Epic');
+        epicsCard.title = 'Click to view all epics';
+    }
+    
+    // Features card
+    const featuresCard = document.getElementById('stat-features').closest('.stat-card');
+    if (featuresCard) {
+        featuresCard.style.cursor = 'pointer';
+        featuresCard.onclick = () => searchByType('Feature');
+        featuresCard.title = 'Click to view all features';
+    }
+}
+
+function searchByTag(tag) {
+    // Switch to search tab
+    document.querySelector('.tab-btn[data-tab="search"]').click();
+    
+    // Set the tag filter
+    document.getElementById('filter-tags').value = tag;
+    
+    // Trigger search
+    setTimeout(() => {
+        performSearch();
+        ToastManager.info('Filtered', `Showing items tagged with "${tag}"`);
+    }, 100);
+}
+
+function searchByType(type) {
+    // Switch to search tab
+    document.querySelector('.tab-btn[data-tab="search"]').click();
+    
+    // Set the type filter
+    document.getElementById('filter-type').value = type;
+    
+    // Trigger search
+    setTimeout(() => {
+        performSearch();
+        ToastManager.info('Filtered', `Showing all ${type}s`);
+    }, 100);
 }
 
 function loadStatsProjectFilter() {
@@ -982,16 +1264,16 @@ async function backupDatabase() {
                 btn.disabled = false;
                 btn.classList.remove('success-flash');
             }, 2000);
-            alert(`Database backed up to:\n${data.data.backupPath}`);
+            ToastManager.success('Database Backed Up', `Backup saved to ${data.data.backupPath.split('\\').pop()}`);
         } else {
             btn.textContent = originalText;
             btn.disabled = false;
-            alert(`Backup failed: ${data.error}`);
+            ToastManager.error('Backup Failed', data.error);
         }
     } catch (error) {
         btn.textContent = originalText;
         btn.disabled = false;
-        alert(`Error: ${error.message}`);
+        ToastManager.error('Backup Error', error.message);
     }
 }
 
@@ -1018,17 +1300,17 @@ async function shrinkDatabase() {
                 btn.disabled = false;
                 btn.classList.remove('success-flash');
             }, 2000);
-            alert(data.data.message);
+            ToastManager.success('Database Shrunk', `Reclaimed ${data.data.reclaimedMB}MB (${data.data.beforeSizeMB}MB → ${data.data.afterSizeMB}MB)`);
             loadSettings(); // Refresh size display
         } else {
             btn.textContent = originalText;
             btn.disabled = false;
-            alert(`Shrink failed: ${data.error}`);
+            ToastManager.error('Shrink Failed', data.error);
         }
     } catch (error) {
         btn.textContent = originalText;
         btn.disabled = false;
-        alert(`Error: ${error.message}`);
+        ToastManager.error('Shrink Error', error.message);
     }
 }
 
@@ -1205,56 +1487,6 @@ async function loadProjectFilter() {
         console.error('Error loading projects:', error);
     }
 }
-
-// Database management buttons
-document.getElementById('shrink-btn').addEventListener('click', async () => {
-    if (!confirm('Shrink database? This will reclaim unused space but may take a moment.')) {
-        return;
-    }
-    
-    const btn = document.getElementById('shrink-btn');
-    btn.disabled = true;
-    btn.textContent = 'Shrinking...';
-    
-    try {
-        const response = await fetch('/api/database/shrink', { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            alert(`Database shrunk!\n\nBefore: ${data.data.beforeSizeMB}MB\nAfter: ${data.data.afterSizeMB}MB\nReclaimed: ${data.data.reclaimedMB}MB`);
-            loadSettings(); // Refresh stats
-        } else {
-            alert('Shrink failed: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Shrink Database';
-    }
-});
-
-document.getElementById('backup-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('backup-btn');
-    btn.disabled = true;
-    btn.textContent = 'Creating backup...';
-    
-    try {
-        const response = await fetch('/api/backup', { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            alert(`Backup created successfully!\n\nLocation: ${data.data.backupPath}`);
-        } else {
-            alert('Backup failed: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Backup Database';
-    }
-});
 
 document.getElementById('export-csv-btn').addEventListener('click', () => {
     window.location.href = '/api/export/csv';

@@ -9,15 +9,17 @@ MGC ADO Tracker solves a real problem: **finding work items in messy Azure DevOp
 - 📥 **Fast Sync**: Import work items from Azure DevOps to local database
 - 🏷️ **AI Tagging**: Generate intelligent tags from work item content
 - 🔍 **Smart Search**: Find items by content, not just Azure's structure
-- 📊 **Web Dashboard**: Clean interface for searching and analysis
+- 📊 **Web Dashboard**: Clean interface for searching and analysis with hierarchy stats
 - 🤖 **Claude Integration**: Natural language search via Claude Desktop
 
 **No more clicking through iterations and area paths hoping to find that authentication story you created 3 months ago.**
 
-## Features
+## Key Features
 
 - **Smart Search**: Find work items by keywords, tags, or content
 - **AI Tagging**: Automatically generates meaningful tags (authentication, security, mobile, etc.)
+- **Hierarchy Tracking**: See parent-child relationships (Epics → Features → Stories)
+- **Work Item Health**: Track tagging progress, stale items, completion rates
 - **Local Database**: Fast SQLite database with your own organizational structure
 - **Web Dashboard**: Clean interface at `localhost:3738`
 - **MCP Integration**: Works with Claude Desktop for natural language search
@@ -136,6 +138,19 @@ Available when using with Claude Desktop:
 
 **Location**: `~/.ado-tracker/database.db`  
 **Backups**: `~/.ado-tracker/backups/` (keeps last 7)
+
+### Database Features
+- Stores all work items with full metadata
+- Tracks parent-child relationships via links table
+- Maintains sync history and tagging status
+- Auto-reloads after sync to ensure fresh data
+- Supports VACUUM to reclaim space
+
+### Statistics Available
+- **Hierarchy**: Epics, Features, Orphans, Items with Children, Max Depth
+- **Health**: Tagging progress, items without descriptions, completion rate
+- **Activity**: Items created/closed this week/month, stale items (30/60/90 days)
+- **Age**: Average age of open items, oldest open item
 
 ## Project Structure
 

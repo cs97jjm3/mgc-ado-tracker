@@ -9,8 +9,12 @@
 <body>
     <div class="container">
         <header>
-            <h1>MGC ADO Tracker</h1>
-            <p>Track Azure DevOps work items with AI-powered intelligence</p>
+            <img src="/logo.png" alt="MGC ADO Tracker Logo" class="logo">
+            <div class="header-content">
+                <h1>MGC ADO Tracker</h1>
+                <p>Track Azure DevOps work items with AI-powered intelligence</p>
+            </div>
+            <div id="sync-status-indicator" style="margin-left: auto;"></div>
         </header>
 
         <nav class="tabs">
@@ -51,6 +55,18 @@
                 </select>
 
                 <input type="text" id="filter-tags" placeholder="Filter by tags (comma separated)" />
+            </div>
+
+            <!-- Search Results Header -->
+            <div id="search-results-header" style="display: none; margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-sm); display: flex; justify-content: space-between; align-items: center;">
+                <div id="search-results-count" style="font-weight: 600; color: var(--text-primary);"></div>
+                <select id="search-sort" style="padding: 6px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 13px;">
+                    <option value="relevance">Sort: Relevance</option>
+                    <option value="newest">Sort: Newest First</option>
+                    <option value="oldest">Sort: Oldest First</option>
+                    <option value="title">Sort: A-Z</option>
+                    <option value="updated">Sort: Recently Updated</option>
+                </select>
             </div>
 
             <div id="search-results">
@@ -308,29 +324,32 @@
         <!-- Settings Tab -->
         <div id="settings-tab" class="tab-content">
             <div class="sync-panel">
-                <div style="background: #f3f9ff; border-left: 4px solid var(--primary-color); padding: 16px; border-radius: var(--radius-sm); margin-bottom: 24px;">
-                    <h3 style="margin-top: 0; color: var(--primary-dark);">ℹ️ Configuration (Read-Only)</h3>
+                <div style="background: #f3f9ff; border-left: 4px solid var(--primary-color); padding: 20px; border-radius: var(--radius-sm); margin-bottom: 24px;">
+                    <h3 style="margin-top: 0; color: var(--primary-dark); font-size: 18px;">ℹ️ Configuration (Read-Only)</h3>
                     <p style="margin: 8px 0; color: var(--text-secondary);">All settings are configured through your Claude Desktop config file.</p>
                     <p style="margin: 8px 0; font-size: 13px; color: var(--text-tertiary);">
-                        <strong>Location:</strong> <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px;">C:\Users\murre\AppData\Roaming\Claude\claude_desktop_config.json</code>
+                        <strong>Location:</strong> <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px; font-size: 12px;">%APPDATA%\Claude\claude_desktop_config.json</code>
                     </p>
                 </div>
                 
-                <h2>Current Configuration</h2>
-                <div class="sync-status" style="margin-bottom: 24px;">
-                    <div class="sync-status-item">
-                        <strong>Organization URL:</strong>
-                        <span id="config-org-url">Loading...</span>
+                <h2 style="font-size: 20px; margin-bottom: 16px;">🏛️ Azure DevOps Connection</h2>
+                <div class="sync-status" style="margin-bottom: 24px; font-size: 14px;">
+                    <div class="sync-status-item" style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                        <strong style="color: var(--text-primary); min-width: 180px; display: inline-block;">Organization URL:</strong>
+                        <span id="config-org-url" style="color: var(--primary-color); font-family: monospace; font-size: 13px;">Loading...</span>
                     </div>
-                    <div class="sync-status-item">
-                        <strong>Project:</strong>
-                        <span id="config-project">Loading...</span>
+                    <div class="sync-status-item" style="padding: 12px 0; border-bottom: 1px solid var(--border-color);">
+                        <strong style="color: var(--text-primary); min-width: 180px; display: inline-block;">Project:</strong>
+                        <span id="config-project" style="color: var(--primary-color); font-weight: 600;">Loading...</span>
                     </div>
-                    <div class="sync-status-item">
-                        <strong>Dashboard Port:</strong>
+                    <div class="sync-status-item" style="padding: 12px 0;">
+                        <strong style="color: var(--text-primary); min-width: 180px; display: inline-block;">Dashboard Port:</strong>
                         <span id="config-port">Loading...</span>
                     </div>
-                    <div class="sync-status-item">
+                </div>
+
+                <h2 style="font-size: 20px; margin-bottom: 16px;">⚙️ Automation Settings</h2>
+                <div class="sync-status" style="margin-bottom: 24px; font-size: 14px;">
                         <strong>Background Sync:</strong>
                         <span id="config-sync">Loading...</span>
                     </div>
@@ -362,6 +381,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
 
     <!-- Modal -->
     <div id="modal" class="modal">
