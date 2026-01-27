@@ -1,31 +1,52 @@
 # MGC ADO Tracker
 
-Track Azure DevOps work items with AI-powered tagging, intelligent search, and comprehensive analytics.
+🔐 **Secure Azure DevOps work item tracking with AI-powered tagging, role-based access control, and comprehensive analytics.**
 
 ## What It Does
 
 MGC ADO Tracker solves a real problem: **finding work items in messy Azure DevOps projects**.
 
-- 📥 **Fast Sync**: Import work items from Azure DevOps to local database
+- 🔐 **Secure Authentication**: Role-based access with admin and user roles
+- 📥 **Fast Sync**: Import work items from Azure DevOps to local database  
 - 🏷️ **AI Tagging**: Generate intelligent tags from work item content
 - 🔄 **AI Re-Tagging**: Refresh tags with improved quality or fix low-confidence tags
 - 🔍 **Smart Search**: Find items by content, not just Azure's structure
 - 📊 **Rich Analytics**: Team workload, velocity trends, and comprehensive statistics
 - 🎯 **Project Filtering**: Filter all statistics by specific projects
-- 🌐 **Web Dashboard**: Clean, collapsible interface for searching and analysis
+- 🌐 **Web Dashboard**: Clean, secure interface with collapsible sections
+- 👥 **User Management**: Multi-user support with admin controls
 - 🤖 **Claude Integration**: Natural language search via Claude Desktop
 
 **No more clicking through iterations and area paths hoping to find that authentication story you created 3 months ago.**
 
 ## Key Features
 
+### 🔐 Security & Authentication
+
+- **Session-Based Authentication**: Secure httpOnly cookies with configurable timeout
+- **Role-Based Access Control**: Admin and User roles with different permissions
+- **Password Hashing**: bcrypt with 10 salt rounds
+- **User Management**: Admin panel for creating, editing, and managing users
+- **Auto-Created Admin**: First admin user created from environment variables
+- **Remember Me**: Optional 30-day session extension
+- **Last Login Tracking**: Monitor user activity
+- **Soft Deletes**: Users can be deactivated but data preserved
+
+**Access Control:**
+- **Search & Statistics**: Available to all authenticated users
+- **Sync, Settings & Users**: Admin-only access
+- **Password Changes**: Users can change their own password
+- **User CRUD**: Admins only
+
 ### Search & Discovery
+
 - **Smart Search**: Find work items by keywords, tags, or content
 - **AI Tagging**: Automatically generates meaningful tags (authentication, security, mobile, etc.)
 - **Hierarchy Tracking**: See parent-child relationships (Epics → Features → Stories)
 - **Tag Confidence Scores**: See how confident the AI is about each tag
 
 ### AI Re-Tagging
+
 - **5 Re-tagging Modes**:
   - 🔄 Re-tag Everything (complete refresh)
   - ⚠️ Fix Poor Quality Tags (below confidence threshold)
@@ -36,6 +57,7 @@ MGC ADO Tracker solves a real problem: **finding work items in messy Azure DevOp
 - **Progress Tracking**: Real-time progress bar with item counts
 - **Cancellable**: Stop re-tagging after current batch
 - **Batch Processing**: Configure batch size (1-100 items)
+- **Admin-Only Access**: Protected re-tagging operations
 
 ### Analytics & Statistics
 
@@ -73,16 +95,20 @@ MGC ADO Tracker solves a real problem: **finding work items in messy Azure DevOp
 - Clear visual indicator with blue border
 
 ### Dashboard Features
+
+- **Secure Login**: Email/password authentication with role-based access
 - **Collapsible Sections**: Sync page sections can expand/collapse for cleaner navigation
 - **Web Dashboard**: Clean interface at `localhost:3738`
 - **MCP Integration**: Works with Claude Desktop for natural language search
-- **Export**: Download as CSV
-- **Database Management**: Backup, shrink, and optimize database
+- **Export**: Download as CSV (all users)
+- **Database Management**: Backup, shrink, optimize (admin only)
+- **User Management**: Create, edit, delete users (admin only)
 - **Persistent State**: Remembers which sections you've expanded/collapsed
 
 ## Installation
 
 ### Prerequisites
+
 - Node.js 18+
 - Azure DevOps account with Personal Access Token
 - Claude Desktop (for MCP integration)
@@ -126,18 +152,122 @@ Edit your config file:
 
 4. **Restart Claude Desktop**
 
-5. **Open Dashboard**: http://localhost:3738
+5. **Access Dashboard**: http://localhost:3738
 
-6. **Sync Work Items**
-   - Go to Sync tab
-   - Select project
-   - Click "Start Sync" (quick sync) or "Import Historical Data" (complete import)
-   - Wait for completion (~30 seconds for 1000 items)
+## Authentication Setup
 
-7. **Tag Items** (optional but recommended)
-   - In Claude Desktop chat: "Tag my pending work items"
-   - Or use dashboard AI Tagging panel
-   - Takes ~2-5 seconds per item
+### First-Time Setup
+
+On first run, a default admin account is created automatically:
+
+**Default Credentials:**
+- Username: `admin`
+- Password: `admin123`
+
+⚠️ **IMPORTANT**: Change this password immediately after first login!
+
+### Login Process
+
+1. Visit http://localhost:3738
+2. Enter default credentials (admin / admin123)
+3. Click "Sign In"
+4. **Go to Settings tab → Change Password** (recommended)
+5. Optional: Check "Remember me" to extend session to 30 days (default: 24 hours)
+
+### User Management (Admin Only)
+
+Admins can manage users via the **👥 Users** tab (only visible to admins):
+
+**Add Users:**
+1. Click "➕ Add User"
+2. Enter username, password (min 8 characters), display name, and role
+3. Choose role: 
+   - **User**: Can search, view statistics, export data
+   - **Admin**: Full access including sync, settings, user management
+4. Click Save
+
+**Edit Users:**
+- Click Edit button on user row
+- Update username, display name, or role
+- Leave password blank to keep current password
+- Cannot edit your own account
+
+**Delete Users:**
+- Click Delete button (soft delete - user is deactivated)
+- Deleted users cannot login but data is preserved
+- Cannot delete your own account
+
+**Change Passwords:**
+- Users can change their own password in Settings tab
+- Admins can reset passwords for any user
+
+### Security Features
+
+- **Password Hashing**: bcrypt with 10 salt rounds
+- **Session-Based Auth**: express-session with httpOnly cookies
+- **Role-Based Access**: Admin vs User permissions enforced server-side
+- **Password Requirements**: Minimum 8 characters
+- **Session Timeout**: Configurable via `SESSION_MAX_AGE` (default: 24 hours)
+- **Soft Deletes**: Users can be restored from database if needed
+- **Last Login Tracking**: Monitor user activity
+- **Remember Me**: Extends session to 30 days
+- **Secure Cookies**: httpOnly flag prevents XSS attacks
+
+### Access Control Matrix
+
+| Feature | User | Admin |
+|---------|------|-------|
+| Search Work Items | ✅ | ✅ |
+| View Statistics | ✅ | ✅ |
+| Export CSV | ✅ | ✅ |
+| Sync Data | ❌ | ✅ |
+| AI Tagging | ❌ | ✅ |
+| AI Re-Tagging | ❌ | ✅ |
+| View Settings | ❌ | ✅ |
+| User Management | ❌ | ✅ |
+| Database Backup | ❌ | ✅ |
+
+### Configuration Options
+
+Add to Claude Desktop config (optional):
+
+```json
+{
+  "env": {
+    "SESSION_SECRET": "your-random-secret-here",
+    "SESSION_MAX_AGE": "86400000"
+  }
+}
+```
+
+**Environment Variables:**
+- `SESSION_SECRET`: Secret key for session encryption (auto-generated if not set)
+- `SESSION_MAX_AGE`: Session timeout in milliseconds (default: 86400000 = 24 hours)
+
+### Troubleshooting Authentication
+
+**Cannot Login:**
+- Use default credentials: admin / admin123
+- Check browser console for errors
+- Clear browser cookies and cache
+- Restart Claude Desktop to reload server
+
+**Session Expires Too Quickly:**
+- Increase `SESSION_MAX_AGE` (in milliseconds)
+- Use "Remember me" option at login
+- Default: 24 hours (86400000ms)
+- "Remember me": 30 days (2592000000ms)
+
+**Users Tab Not Visible:**
+- Only admins can see the Users tab
+- Login as admin to access user management
+- First user (admin) is always admin role
+
+**Forgot Admin Password:**
+- Stop MCP server
+- Delete database: `~/.ado-tracker/database.db`
+- Restart Claude Desktop (admin account recreated)
+- **Warning**: This deletes all data including work items
 
 ## Usage
 
@@ -156,13 +286,14 @@ Claude: [Searches with filters]
 
 ### Searching via Dashboard
 
-1. Go to Search tab
-2. Enter keywords or select filters (project, type, state, tags)
-3. Click Search
-4. Click results to see details
-5. Click 🔗 to open in Azure DevOps
+1. Login at http://localhost:3738
+2. Go to Search tab
+3. Enter keywords or select filters (project, type, state, tags)
+4. Click Search
+5. Click results to see details
+6. Click 🔗 to open in Azure DevOps
 
-### Understanding Sync Options
+### Understanding Sync Options (Admin Only)
 
 **Start Sync** (Quick):
 - Respects "From Date" and "Max Items" settings
@@ -175,7 +306,7 @@ Claude: [Searches with filters]
 - Slower but comprehensive
 - Use once for initial setup
 
-### AI Re-Tagging
+### AI Re-Tagging (Admin Only)
 
 **When to re-tag:**
 - Tags have low confidence scores
@@ -230,7 +361,7 @@ Claude: [Searches with filters]
   - 🟡 Yellow bars = Medium velocity (34-66%)
   - 🟢 Green bars = High velocity (67-100%)
 
-### Collapsible Sections (Sync Tab)
+### Collapsible Sections (Sync Tab - Admin Only)
 
 The Sync tab has 5 collapsible sections for cleaner navigation:
 
@@ -247,7 +378,7 @@ The Sync tab has 5 collapsible sections for cleaner navigation:
 - Smooth animations
 - Less scrolling, better focus
 
-### Syncing
+### Syncing (Admin Only)
 
 **Manual Sync:**
 - Sync tab → Select project → Start Sync or Import Historical Data
@@ -256,32 +387,32 @@ The Sync tab has 5 collapsible sections for cleaner navigation:
 - Syncs all work item types except: Test Cases, Test Suites, Shared Parameters, Test Plans, Shared Steps
 
 **AI Tagging:**
-- After sync, use Claude chat: "Tag my pending work items"
-- Or use dashboard AI Tagging panel
+- After sync, admin can tag items via dashboard AI Tagging panel
+- Or use Claude chat (if admin MCP session): "Tag my pending work items"
 - Processes items in batches
 - Background processing available
 
 ### Exporting
 
-Settings tab → Export to CSV
+Settings tab → Export to CSV (available to all users)
 
 ## MCP Tools
 
-Available when using with Claude Desktop:
+Available when using with Claude Desktop (requires authentication session):
 
 ### Core Tools
-- `create_work_item` - Create work item in ADO
+- `create_work_item` - Create work item in ADO (admin only)
 - `search_work_items` - Search by keywords/tags/filters
 - `get_work_item` - Get item details
 - `list_tags` - Show all tags with counts
 - `launch_dashboard` - Get dashboard URL
 
-### Sync Tools
+### Sync Tools (Admin Only)
 - `sync_ado_work_items` - Import from ADO
 - `get_sync_status` - Check sync status
 - `cleanup_excluded_work_items` - Remove test items
 
-### Tagging Tools
+### Tagging Tools (Admin Only)
 - `tag_pending_work_items` - Generate AI tags for batch
 - `tag_all_items` - Force re-tag everything
 - `start_background_tagging` - Auto-tag in background
@@ -300,6 +431,8 @@ Available when using with Claude Desktop:
 - `work_item_links`: Parent-child relationships
 - `tags`: Tag usage statistics
 - `sync_logs`: Sync history
+- `users`: User accounts with authentication
+- `sessions`: User sessions
 
 **Re-Tagging Columns:**
 - `tags_backup`: Backup of tags before re-tagging
@@ -307,13 +440,26 @@ Available when using with Claude Desktop:
 - `backup_timestamp`: When backup was created
 - `last_retagged_at`: Last re-tag timestamp
 
+**User Table Columns:**
+- `id`: Primary key
+- `email`: Username (unique)
+- `password_hash`: bcrypt hashed password
+- `display_name`: Full name or display name
+- `role`: admin or user
+- `is_active`: 1 = active, 0 = deleted
+- `last_login`: Last login timestamp
+- `created_at`: Account creation timestamp
+
 ### Database Features
+
 - Stores all work items with full metadata
 - Tracks parent-child relationships via links table
 - Maintains sync history and tagging status
 - Auto-reloads after sync to ensure fresh data
 - Supports VACUUM to reclaim space
 - Automatic tag backups before re-tagging
+- User authentication and session management
+- Role-based access control
 
 ### Statistics Available
 
@@ -353,6 +499,8 @@ Available when using with Claude Desktop:
 mgc-ado-tracker/
 ├── src/
 │   ├── index.js              # MCP server
+│   ├── auth/
+│   │   └── auth.js          # Authentication module
 │   ├── database/
 │   │   ├── db.js            # Database management
 │   │   └── workItems.js     # Work item queries
@@ -362,11 +510,12 @@ mgc-ado-tracker/
 │   ├── dashboard/            # Web server + API endpoints
 │   └── utils/                # AI tagging
 ├── public/                   # Dashboard UI
-│   ├── index.html           # Main dashboard (collapsible sections)
+│   ├── index.html           # Main dashboard
+│   ├── login.html           # Login page
 │   ├── css/
-│   │   └── styles.css       # Complete styling (collapsible + batch input fixes)
+│   │   └── styles.css       # Complete styling
 │   ├── js/
-│   │   └── app.js           # Frontend logic (collapsible + velocity dates)
+│   │   └── app.js           # Frontend logic
 │   ├── logo.png
 │   ├── favicon.ico
 │   └── favicon.png
@@ -376,13 +525,25 @@ mgc-ado-tracker/
 
 ## Dashboard Endpoints
 
+### Authentication API
+- `POST /api/auth/login` - Login with email/password
+- `POST /api/auth/logout` - Logout and destroy session
+- `GET /api/auth/me` - Get current user info
+
+### User Management API (Admin Only)
+- `GET /api/users` - List all users
+- `POST /api/users` - Create new user
+- `PUT /api/users/:id` - Update user
+- `DELETE /api/users/:id` - Delete (deactivate) user
+- `POST /api/users/:id/password` - Change password
+
 ### Statistics API
 - `GET /api/stats/database` - Database stats
-- `GET /api/stats/work-items` - Work item stats (includes new team & velocity stats)
+- `GET /api/stats/work-items` - Work item stats (includes team & velocity)
 - `GET /api/stats/by-project` - Per-project stats
 - `GET /api/stats/pending-tags` - Items needing tags
 
-### Re-Tagging API
+### Re-Tagging API (Admin Only)
 - `POST /api/retag/estimate` - Estimate item count for re-tag mode
 - `POST /api/retag/execute` - Start re-tagging operation
 - `GET /api/retag/progress` - Get real-time progress
@@ -392,19 +553,22 @@ mgc-ado-tracker/
 - `GET /api/work-items/search` - Search work items
 - `GET /api/work-items/:id` - Get work item details
 - `GET /api/tags` - Get all tags
-- `GET /api/projects` - Get all projects
+- `GET /api/projects` - Get all projects (admin only)
 
-### Sync
+### Sync (Admin Only)
 - `POST /api/sync` - Manual sync (quick)
 - `POST /api/import` - Import historical data (complete)
 - `GET /api/sync/status` - Sync status
 - `GET /api/sync/history` - Sync history
 - `GET /api/sync/progress` - Real-time sync progress
 
-### Database
+### Database (Admin Only)
 - `POST /api/backup` - Create backup
 - `POST /api/database/shrink` - Vacuum database
-- `GET /api/export/csv` - Export to CSV
+- `GET /api/export/csv` - Export to CSV (all users)
+
+### Settings (Admin Only)
+- `GET /api/settings` - Get configuration
 
 ## Configuration Options
 
@@ -419,10 +583,12 @@ Add to your Claude Desktop config:
     "DASHBOARD_PORT": "3738",
     
     // Optional:
-    "SYNC_ENABLED": "false",              // Auto-sync on startup
-    "SYNC_INTERVAL_MINUTES": "60",        // Auto-sync interval
-    "AUTO_TAG_NEW_ITEMS": "true",         // Auto-tag after sync
-    "TAG_CONFIDENCE_THRESHOLD": "0.8"     // Min confidence (0-1)
+    "SESSION_SECRET": "your-random-secret",
+    "SESSION_MAX_AGE": "86400000",
+    "SYNC_ENABLED": "false",
+    "SYNC_INTERVAL_MINUTES": "60",
+    "AUTO_TAG_NEW_ITEMS": "true",
+    "TAG_CONFIDENCE_THRESHOLD": "0.8"
   }
 }
 ```
@@ -438,12 +604,19 @@ Add to your Claude Desktop config:
 - Change `DASHBOARD_PORT` in config to another port
 - Or stop other service using 3738
 
+**Cannot access Sync/Settings tabs**
+- These tabs require admin role
+- Login as admin (default: admin / admin123)
+- Regular users only see Search and Statistics tabs
+
 **Sync not working**
+- Must be logged in as admin
 - Verify exact project name (case-sensitive)
 - Check PAT permissions include project
 - Review sync history in dashboard for specific errors
 
 **Re-tagging shows 0 items**
+- Must be admin to access re-tagging
 - Check if items are already tagged
 - Verify project name if using project filter
 - Try "📊 Estimate Count" to see why count is 0
@@ -468,14 +641,20 @@ Add to your Claude Desktop config:
 - Try clearing localStorage: `localStorage.clear()`
 - Reload page
 
+**Session expired / kicked out**
+- Session timeout reached (default: 24 hours)
+- Use "Remember me" for 30-day sessions
+- Check `SESSION_MAX_AGE` configuration
+
 ## Performance Tips
 
 - **Sync in batches**: Use `maxItems` parameter for large projects
-- **Background tagging**: Enable for automatic tagging
-- **Shrink database**: Run periodically to reclaim space
+- **Background tagging**: Enable for automatic tagging (admin only)
+- **Shrink database**: Run periodically to reclaim space (admin only)
 - **Export regularly**: Keep CSV backups of important data
 - **Re-tag selectively**: Use confidence threshold or project filter instead of "all items"
 - **Collapse unused sections**: Keep Sync tab organized by collapsing sections you don't need
+- **Use appropriate roles**: Give users "user" role if they only need search/stats access
 
 ## Technologies
 
@@ -484,11 +663,39 @@ Add to your Claude Desktop config:
 - **Azure DevOps**: azure-devops-node-api
 - **AI**: Anthropic SDK (Claude Sonnet 4)
 - **MCP**: @modelcontextprotocol/sdk
+- **Authentication**: express-session + bcrypt
 - **Frontend**: Vanilla JavaScript, CSS Grid/Flexbox
 
 ## Changelog
 
-### v2.1.0 (Latest - January 27, 2026)
+### v2.3.0 (Latest - January 27, 2026)
+- 🔐 **Comprehensive Authentication System**:
+  - Session-based authentication with role-based access control
+  - Default admin account (admin / admin123)
+  - User management panel with create/edit/delete (admin only)
+  - Password hashing with bcrypt (10 salt rounds)
+  - Login page with "Remember me" option
+  - Session timeout configuration (default: 24 hours)
+  - httpOnly secure cookies
+  - Soft delete for user accounts
+  - Last login tracking
+  - Password requirements (min 8 characters)
+- 🔒 **Protected Routes**:
+  - Sync operations (admin only)
+  - AI Tagging & Re-Tagging (admin only)
+  - Settings & Configuration (admin only)
+  - User Management (admin only)
+  - Database Backup (admin only)
+  - Search & Statistics (all authenticated users)
+  - Export CSV (all authenticated users)
+- 🎨 **UI Improvements**:
+  - Styled login page with branding
+  - User dropdown in header with logout
+  - Role-based tab visibility
+  - Users tab (admin only)
+  - Professional look & feel
+
+### v2.2.0
 - 🎨 **UX Improvements**: Complete redesign of Sync page sections
   - Clean card-based layout for re-tagging options
   - Plain English labels ("Fix Poor Quality Tags" vs "confidence threshold")
@@ -559,4 +766,4 @@ MIT License - See LICENSE file for details
 
 **Stop losing track of your work items. Start using MGC ADO Tracker today.**
 
-**New in v2.1:** Clean, collapsible Sync page with intuitive UX. Track your team's velocity, identify bottlenecks, and maintain tag quality with AI re-tagging. 🚀
+**New in v2.3:** Comprehensive authentication system with role-based access control. Secure your Azure DevOps data with session-based authentication, user management, and admin-only operations. 🔐🚀

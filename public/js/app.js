@@ -135,11 +135,191 @@ async function updateSyncStatusIndicator() {
 
 // Update sync status on load and every 30 seconds
 document.addEventListener('DOMContentLoaded', () => {
+    // Load current user and show/hide Users tab
+    loadCurrentUser();
+    
     // Initialize collapsible sections
     initializeCollapsibleSections();
     
     updateSyncStatusIndicator();
     setInterval(updateSyncStatusIndicator, 30000);
+});
+
+// ============================================
+// AUTHENTICATION
+// ============================================
+// Load current user and show/hide Users tab
+async function loadCurrentUser() {
+    try {
+        const response = await fetch('/api/auth/me');
+        const data = await response.json();
+        if (data.success) {
+            const user = data.data.user;
+            document.getElementById('current-user-email').textContent = user.displayName || user.email;
+            
+            // Show Users tab if admin
+            if (user.role === 'admin') {
+                document.getElementById('users-tab-btn').style.display = 'block';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading user:', error);
+    }
+}
+
+// Logout handler
+document.getElementById('logout-btn').addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to logout?')) return;
+    
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login.html';
+    } catch (error) {
+        ToastManager.error('Logout Failed', error.message);
+    }
+});
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+let currentUsers = [];
+
+async function loadUsers() {
+    try {
+        const response = await fetch('/api/users');
+        const data = await response.json();
+        if (data.success) {
+            currentUsers = data.data;
+            displayUsers(currentUsers);
+        }
+    } catch (error) {
+        console.error('Error loading users:', error);
+        ToastManager.error('Error', 'Failed to load users');
+    }
+}
+
+function displayUsers(users) {
+    const tbody = document.getElementById('users-table-body');
+    if (users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">No users found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = users.map(user => {
+        const roleBadge = user.role === 'admin' 
+            ? '<span class="tag" style="background: #764ba2; color: white;">Admin</span>'
+            : '<span class="tag" style="background: #4facfe; color: white;">User</span>';
+        const statusBadge = user.active 
+            ? '<span class="tag" style="background: #43e97b; color: white;">Active</span>'
+            : '<span class="tag" style="background: #999; color: white;">Inactive</span>';
+        const lastLogin = user.last_login ? formatDate(user.last_login) : 'Never';
+        
+        return `
+            <tr style="border-bottom: 1px solid var(--border-color);">
+                <td style="padding: 12px;">${escapeHtml(user.email)}</td>
+                <td style="padding: 12px;">${escapeHtml(user.display_name || '-')}</td>
+                <td style="padding: 12px;">${roleBadge}</td>
+                <td style="padding: 12px;">${lastLogin}</td>
+                <td style="padding: 12px;">${statusBadge}</td>
+                <td style="padding: 12px;">
+                    <button onclick="editUser(${user.id})" class="secondary-btn" style="padding: 6px 12px; margin-right: 5px;">Edit</button>
+                    <button onclick="deleteUser(${user.id})" class="secondary-btn" style="padding: 6px 12px; background: #f48771;">Delete</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function openUserModal(user = null) {
+    const modal = document.getElementById('user-modal');
+    const title = document.getElementById('user-modal-title');
+    const form = document.getElementById('user-form');
+    
+    form.reset();
+    
+    if (user) {
+        title.textContent = 'Edit User';
+        document.getElementById('user-id').value = user.id;
+        document.getElementById('user-email').value = user.email;
+        document.getElementById('user-display-name').value = user.display_name || '';
+        document.getElementById('user-role').value = user.role;
+        document.getElementById('user-password').removeAttribute('required');
+    } else {
+        title.textContent = 'Add User';
+        document.getElementById('user-id').value = '';
+        document.getElementById('user-password').setAttribute('required', 'required');
+    }
+    
+    modal.style.display = 'block';
+}
+
+function editUser(userId) {
+    const user = currentUsers.find(u => u.id === userId);
+    if (user) openUserModal(user);
+}
+
+async function deleteUser(userId) {
+    const user = currentUsers.find(u => u.id === userId);
+    if (!user) return;
+    
+    if (!confirm(`Delete user ${user.email}? This will deactivate their account.`)) return;
+    
+    try {
+        const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            ToastManager.success('User Deleted', 'User has been deactivated');
+            loadUsers();
+        } else {
+            ToastManager.error('Delete Failed', data.error);
+        }
+    } catch (error) {
+        ToastManager.error('Error', error.message);
+    }
+}
+
+// Event listeners
+document.getElementById('add-user-btn').addEventListener('click', () => openUserModal());
+document.getElementById('user-modal-close').addEventListener('click', () => {
+    document.getElementById('user-modal').style.display = 'none';
+});
+document.getElementById('user-cancel-btn').addEventListener('click', () => {
+    document.getElementById('user-modal').style.display = 'none';
+});
+
+document.getElementById('user-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const userId = document.getElementById('user-id').value;
+    const email = document.getElementById('user-email').value;
+    const password = document.getElementById('user-password').value;
+    const displayName = document.getElementById('user-display-name').value;
+    const role = document.getElementById('user-role').value;
+    
+    const userData = { email, displayName, role };
+    if (password) userData.password = password;
+    
+    try {
+        const url = userId ? `/api/users/${userId}` : '/api/users';
+        const method = userId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData)
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            ToastManager.success('Success', userId ? 'User updated' : 'User created');
+            document.getElementById('user-modal').style.display = 'none';
+            loadUsers();
+        } else {
+            ToastManager.error('Error', data.error);
+        }
+    } catch (error) {
+        ToastManager.error('Error', error.message);
+    }
 });
 
 // Initialize collapsible sections
@@ -254,6 +434,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             loadPendingTagCount();
         } else if (tabName === 'settings') {
             loadSettings();
+        } else if (tabName === 'users') {
+            loadUsers();
         }
     });
 });

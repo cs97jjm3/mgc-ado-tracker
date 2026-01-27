@@ -1,8 +1,21 @@
 import express from 'express';
+import session from 'express-session';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import os from 'os';
+import {
+  initializeUsersTable,
+  authenticateUser,
+  requireAuth,
+  requireAdmin,
+  getUserById,
+  listUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  changePassword
+} from '../auth/auth.js';
 import {
   searchWorkItems,
   getAllWorkItems,
@@ -24,8 +37,213 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Session configuration
+const SESSION_SECRET = process.env.SESSION_SECRET || 'mgc-ado-tracker-' + Math.random().toString(36);
+const SESSION_MAX_AGE = parseInt(process.env.SESSION_MAX_AGE) || 24 * 60 * 60 * 1000; // 24 hours default
+
 app.use(express.json());
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // Set to true if using HTTPS
+    httpOnly: true,
+    maxAge: SESSION_MAX_AGE
+  }
+}));
+
+// Note: Users table will be initialized when startDashboard() is called
+
+// Serve login page for unauthenticated users
+app.get('/login.html', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../public/login.html'));
+});
+
+// Serve static files only if authenticated (except login.html)
+app.use((req, res, next) => {
+  // Allow access to login page and auth endpoints
+  if (req.path === '/login.html' || req.path.startsWith('/api/auth/')) {
+    return next();
+  }
+  
+  // Require authentication for all other routes
+  if (!req.session || !req.session.userId) {
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    return res.redirect('/login.html');
+  }
+  
+  next();
+});
+
 app.use(express.static(path.join(__dirname, '../../public')));
+
+// ============================================
+// AUTHENTICATION API ENDPOINTS
+// ============================================
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password, rememberMe } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email and password required' });
+    }
+    
+    const user = await authenticateUser(email, password);
+    
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password' });
+    }
+    
+    // Set session
+    req.session.userId = user.id;
+    req.session.userEmail = user.email;
+    req.session.userRole = user.role;
+    
+    // Extend session if remember me
+    if (rememberMe) {
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+    }
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role
+        }
+      } 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: 'Logout failed' });
+    }
+    res.json({ success: true, message: 'Logged out successfully' });
+  });
+});
+
+// Get current user
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  try {
+    const user = getUserById(req.session.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    res.json({ success: true, data: { user } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// USER MANAGEMENT API (ADMIN ONLY)
+// ============================================
+
+// List all users
+app.get('/api/users', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const users = listUsers();
+    res.json({ success: true, data: users });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create user
+app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const { email, password, role, displayName } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ success: false, error: 'Email and password required' });
+    }
+    
+    const user = createUser(email, password, role || 'user', displayName);
+    res.json({ success: true, data: { user } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update user
+app.put('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const { email, displayName, role, isActive } = req.body;
+    const updates = {};
+    
+    if (email !== undefined) updates.email = email;
+    if (displayName !== undefined) updates.display_name = displayName;
+    if (role !== undefined) updates.role = role;
+    if (isActive !== undefined) updates.is_active = isActive ? 1 : 0;
+    
+    const success = updateUser(parseInt(req.params.id), updates);
+    
+    if (!success) {
+      return res.status(400).json({ success: false, error: 'Update failed' });
+    }
+    
+    res.json({ success: true, message: 'User updated successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Change password
+app.post('/api/users/:id/password', requireAuth, (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    const { newPassword } = req.body;
+    
+    // Users can only change their own password unless admin
+    const currentUser = getUserById(req.session.userId);
+    if (userId !== req.session.userId && currentUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Permission denied' });
+    }
+    
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters' });
+    }
+    
+    changePassword(userId, newPassword);
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:id', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    // Prevent deleting yourself
+    if (userId === req.session.userId) {
+      return res.status(400).json({ success: false, error: 'Cannot delete your own account' });
+    }
+    
+    deleteUser(userId);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// WORK ITEMS API (PROTECTED)
+// ============================================
 
 // API Routes
 
@@ -134,8 +352,8 @@ app.get('/api/stats/database', (req, res) => {
   }
 });
 
-// Sync operations
-app.post('/api/sync', async (req, res) => {
+// Sync operations (ADMIN ONLY)
+app.post('/api/sync', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { projectName, fromDate, maxItems } = req.body;
     
@@ -156,8 +374,8 @@ app.post('/api/sync', async (req, res) => {
   }
 });
 
-// Import historical data
-app.post('/api/import', async (req, res) => {
+// Import historical data (ADMIN ONLY)
+app.post('/api/import', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { projectName, fromDate, batchSize } = req.body;
     
@@ -176,8 +394,8 @@ app.post('/api/import', async (req, res) => {
   }
 });
 
-// Get sync status
-app.get('/api/sync/status', (req, res) => {
+// Get sync status (ADMIN ONLY)
+app.get('/api/sync/status', requireAuth, requireAdmin, (req, res) => {
   try {
     const status = getSyncStatus();
     res.json({ success: true, data: status });
@@ -186,8 +404,8 @@ app.get('/api/sync/status', (req, res) => {
   }
 });
 
-// Get sync history
-app.get('/api/sync/history', (req, res) => {
+// Get sync history (ADMIN ONLY)
+app.get('/api/sync/history', requireAuth, requireAdmin, (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     const history = getSyncHistory(limit);
@@ -214,8 +432,8 @@ app.get('/api/stats/pending-tags', (req, res) => {
   }
 });
 
-// Run AI tagging on pending items
-app.post('/api/tag-pending', async (req, res) => {
+// Run AI tagging on pending items (ADMIN ONLY)
+app.post('/api/tag-pending', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { batchSize, confidenceThreshold } = req.body;
     
@@ -230,8 +448,8 @@ app.post('/api/tag-pending', async (req, res) => {
   }
 });
 
-// Clear sync history
-app.delete('/api/sync/history', (req, res) => {
+// Clear sync history (ADMIN ONLY)
+app.delete('/api/sync/history', requireAuth, requireAdmin, (req, res) => {
   try {
     const db = getDatabase();
     db.run('DELETE FROM sync_log');
@@ -242,8 +460,8 @@ app.delete('/api/sync/history', (req, res) => {
   }
 });
 
-// Get sync progress (for live updates)
-app.get('/api/sync/progress', (req, res) => {
+// Get sync progress (for live updates) (ADMIN ONLY)
+app.get('/api/sync/progress', requireAuth, requireAdmin, (req, res) => {
   try {
     const progress = getSyncProgress();
     res.json({ success: true, data: progress });
@@ -252,8 +470,8 @@ app.get('/api/sync/progress', (req, res) => {
   }
 });
 
-// Backup database
-app.post('/api/backup', (req, res) => {
+// Backup database (ADMIN ONLY)
+app.post('/api/backup', requireAuth, requireAdmin, (req, res) => {
   try {
     const backupPath = backupDatabase();
     res.json({ success: true, data: { backupPath } });
@@ -262,8 +480,8 @@ app.post('/api/backup', (req, res) => {
   }
 });
 
-// Shrink database (VACUUM)
-app.post('/api/database/shrink', (req, res) => {
+// Shrink database (VACUUM) (ADMIN ONLY)
+app.post('/api/database/shrink', requireAuth, requireAdmin, (req, res) => {
   try {
     const result = vacuumDatabase();
     res.json({ success: true, data: result });
@@ -345,8 +563,8 @@ app.get('/api/export/excel', (req, res) => {
   }
 });
 
-// Tag pending work items using AI
-app.post('/api/tags/pending', async (req, res) => {
+// Tag pending work items using AI (ADMIN ONLY)
+app.post('/api/tags/pending', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { batchSize, confidenceThreshold } = req.body;
     
@@ -372,8 +590,8 @@ app.post('/api/tags/generate', (req, res) => {
   }
 });
 
-// Get current settings (read-only)
-app.get('/api/settings', (req, res) => {
+// Get current settings (read-only) (ADMIN ONLY)
+app.get('/api/settings', requireAuth, requireAdmin, (req, res) => {
   try {
     const envVars = getAllEnvVars();
     
@@ -388,8 +606,8 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-// Get all available Azure DevOps projects
-app.get('/api/projects', async (req, res) => {
+// Get all available Azure DevOps projects (ADMIN ONLY)
+app.get('/api/projects', requireAuth, requireAdmin, async (req, res) => {
   try {
     const projects = await getProjects();
     res.json({ 
@@ -635,8 +853,8 @@ app.get('/api/stats/by-project', (req, res) => {
 // RE-TAGGING API ENDPOINTS
 // ============================================
 
-// Estimate items to be re-tagged
-app.post('/api/retag/estimate', (req, res) => {
+// Estimate items to be re-tagged (ADMIN ONLY)
+app.post('/api/retag/estimate', requireAuth, requireAdmin, (req, res) => {
   try {
     const result = estimateRetagCount(req.body);
     res.json({ success: true, data: result });
@@ -645,8 +863,8 @@ app.post('/api/retag/estimate', (req, res) => {
   }
 });
 
-// Execute re-tagging operation
-app.post('/api/retag/execute', async (req, res) => {
+// Execute re-tagging operation (ADMIN ONLY)
+app.post('/api/retag/execute', requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await executeRetag(req.body);
     res.json({ success: result.success, data: result });
@@ -655,8 +873,8 @@ app.post('/api/retag/execute', async (req, res) => {
   }
 });
 
-// Get re-tagging progress
-app.get('/api/retag/progress', (req, res) => {
+// Get re-tagging progress (ADMIN ONLY)
+app.get('/api/retag/progress', requireAuth, requireAdmin, (req, res) => {
   try {
     const progress = getRetagProgress();
     res.json({ success: true, data: progress });
@@ -665,8 +883,8 @@ app.get('/api/retag/progress', (req, res) => {
   }
 });
 
-// Cancel re-tagging
-app.post('/api/retag/cancel', (req, res) => {
+// Cancel re-tagging (ADMIN ONLY)
+app.post('/api/retag/cancel', requireAuth, requireAdmin, (req, res) => {
   try {
     const result = cancelRetag();
     res.json(result);
@@ -675,8 +893,8 @@ app.post('/api/retag/cancel', (req, res) => {
   }
 });
 
-// Get re-tagging history
-app.get('/api/retag/history', (req, res) => {
+// Get re-tagging history (ADMIN ONLY)
+app.get('/api/retag/history', requireAuth, requireAdmin, (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
     const history = getRetagHistory(limit);
@@ -699,10 +917,19 @@ app.get('/api/health', (req, res) => {
 
 export function startDashboard(port = 3738) {
   return new Promise((resolve, reject) => {
+    // Initialize users table (must be called after database is initialized)
+    try {
+      initializeUsersTable();
+    } catch (error) {
+      console.error('Warning: Could not initialize users table:', error.message);
+    }
+    
     const server = app.listen(port, () => {
+      console.error(`Dashboard server listening on http://localhost:${port}`);
       resolve(server);
     }).on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${port} in use, trying ${port + 1}`);
         startDashboard(port + 1).then(resolve).catch(reject);
       } else {
         reject(error);
