@@ -14,6 +14,7 @@ import {
 } from '../database/workItems.js';
 import { getDatabaseStats, backupDatabase, getDatabase, saveDatabase, vacuumDatabase, reloadDatabase } from '../database/db.js';
 import { syncWithAzureDevOps, importHistoricalData, getSyncStatus, getSyncHistory, getSyncProgress, tagPendingWorkItems } from '../sync/syncService.js';
+import { estimateRetagCount, executeRetag, getRetagProgress, cancelRetag, getRetagHistory } from '../retag/retagService.js';
 import { generateTags } from '../utils/aiTagging.js';
 import { getAllEnvVars } from '../utils/configManager.js';
 import { getProjects } from '../api/azureDevOps.js';
@@ -625,6 +626,61 @@ app.get('/api/stats/by-project', (req, res) => {
     });
     
     res.json({ success: true, data: projectStats });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// RE-TAGGING API ENDPOINTS
+// ============================================
+
+// Estimate items to be re-tagged
+app.post('/api/retag/estimate', (req, res) => {
+  try {
+    const result = estimateRetagCount(req.body);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Execute re-tagging operation
+app.post('/api/retag/execute', async (req, res) => {
+  try {
+    const result = await executeRetag(req.body);
+    res.json({ success: result.success, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get re-tagging progress
+app.get('/api/retag/progress', (req, res) => {
+  try {
+    const progress = getRetagProgress();
+    res.json({ success: true, data: progress });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Cancel re-tagging
+app.post('/api/retag/cancel', (req, res) => {
+  try {
+    const result = cancelRetag();
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get re-tagging history
+app.get('/api/retag/history', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const history = getRetagHistory(limit);
+    res.json({ success: true, data: history });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

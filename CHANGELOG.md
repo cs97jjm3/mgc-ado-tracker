@@ -2,6 +2,88 @@
 
 All notable changes to MGC ADO Tracker will be documented in this file.
 
+## [2.1.0] - 2026-01-27
+
+### Added
+- **Collapsible Sections**: All Sync page sections now expand/collapse with state persistence
+  - Manual Sync: Open by default
+  - AI Tagging: Open by default
+  - AI Re-Tagging: Collapsed by default
+  - Sync Status: Collapsed by default
+  - Sync History: Collapsed by default
+- **Velocity Week Dates**: Velocity chart now shows week end dates (e.g., "Ending 27 Jan")
+- **Section State Memory**: Collapse preferences saved to localStorage and restored on reload
+
+### Changed
+- **Complete UX Redesign** of Sync page:
+  - Re-tagging options now use card-based layout with icons
+  - Plain English labels: "Fix Poor Quality Tags" instead of "confidence threshold"
+  - Each option has title + description for clarity
+  - Better visual hierarchy with proper spacing
+  - Help boxes with bullet points explaining features
+- **Improved Warning Boxes**:
+  - Clear bullet points with timing estimates
+  - Better contrast (cream background, orange border)
+  - Larger emoji icons for visibility
+- **Better Explanations**:
+  - "What is Re-Tagging?" blue info box added
+  - Sync buttons now have help text explaining difference
+  - Batch size fields have helpful context text
+
+### Fixed
+- **Batch Size Input Visibility**: White background with proper border, always visible
+- **Project Filter Position**: Moved to correct location (between project stats and team workload)
+- **CSS Specificity**: Fixed `.batch-size-control input` color conflict
+- **Text Contrast**: All text now has proper contrast ratios (WCAG AA compliant)
+- **Hover States**: Added proper hover effects to collapsible section headers
+
+## [2.0.0] - 2026-01-26
+
+### Added
+- **AI Re-Tagging System**: 5 modes to refresh tag quality
+  - Re-tag Everything (complete refresh)
+  - Fix Poor Quality Tags (below confidence threshold)
+  - Re-tag by Date Range (specific time period)
+  - Re-tag One Project (focus on one project)
+  - Tag Missing Items (untagged only)
+- **Re-Tagging Safety Features**:
+  - Automatic tag backup before re-tagging
+  - Hierarchy tags preserved (orphan, has-parent, top-level-*)
+  - Real-time progress tracking with cancellation
+  - Error handling with retry logic
+  - Database saves after each batch
+- **Team & Workload Statistics**:
+  - Unassigned items count
+  - Recently modified items (last 7 days)
+  - Average time to close (days)
+  - Top 10 assignees with open items (cleaned names without email)
+- **Velocity Trend Tracking**:
+  - Items closed per week (last 8 weeks)
+  - Color-coded trend visualization (red/yellow/green)
+  - Red: 0-33% of max (low velocity)
+  - Yellow: 34-66% of max (medium velocity)
+  - Green: 67-100% of max (high velocity)
+- **Project Filtering**: Filter ALL statistics by project
+  - Works with single or multiple projects
+  - Updates all stats, charts, and metrics instantly
+  - Clear visual indicator with blue border and arrow
+- **Database Schema Enhancements**:
+  - `tags_backup` column for tag backup
+  - `confidence_scores_backup` column for confidence backup
+  - `backup_timestamp` for tracking backup time
+  - `last_retagged_at` for tracking re-tag operations
+
+### Changed
+- **Statistics API**: Now returns team & workload data
+- **Orphan Counting**: Now project-aware and more accurate
+- **Sync Help Text**: Added explanation of Start Sync vs Import Historical Data
+- **Project Filter UI**: Positioned between project stats and team workload sections
+
+### Fixed
+- Project-aware orphan counting bug
+- Statistics not updating after project filter change
+- Velocity chart data calculation
+
 ## [1.3.5] - 2026-01-19
 
 ### Added

@@ -106,6 +106,49 @@
                 </div>
             </div>
 
+            <!-- PROJECT FILTER -->
+            <div style="margin: 32px 0 24px 0; padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md); display: flex; align-items: center; gap: 16px; border: 2px solid var(--primary-color);">
+                <label style="font-weight: 600; font-size: 14px; color: var(--text-primary);">📁 Filter by Project:</label>
+                <select id="stats-project-filter" style="flex: 1; max-width: 400px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 14px;">
+                    <option value="">All Projects</option>
+                </select>
+                <span style="font-size: 13px; color: var(--text-tertiary);">⬇️ Filters all statistics and charts below</span>
+            </div>
+
+            <!-- NEW: Team & Workload Stats -->
+            <div style="margin-top: 32px;">
+                <h2 style="margin-bottom: 16px; font-size: 24px;">👥 Team & Workload</h2>
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+                    <div class="stat-card">
+                        <h3>⚠️ Unassigned Items</h3>
+                        <p class="stat-value" id="stat-unassigned">-</p>
+                        <p style="font-size: 13px; color: var(--text-tertiary); margin-top: 8px;">Open items without assignee</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>🔄 Recently Modified</h3>
+                        <p class="stat-value" id="stat-recent-modified">-</p>
+                        <p style="font-size: 13px; color: var(--text-tertiary); margin-top: 8px;">Modified in last 7 days</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>⏱️ Avg Time to Close</h3>
+                        <p class="stat-value" id="stat-avg-close">-</p>
+                        <p style="font-size: 13px; color: var(--text-tertiary); margin-top: 8px;">Days from create to close</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEW: Top Assignees -->
+            <div class="chart-section">
+                <h3>👤 Top Assignees with Open Items</h3>
+                <div id="chart-assignees"></div>
+            </div>
+
+            <!-- NEW: Velocity Trend -->
+            <div class="chart-section">
+                <h3>📈 Velocity Trend (Items Closed per Week)</h3>
+                <div id="chart-velocity"></div>
+            </div>
+
             <!-- Hidden elements for compatibility with old JS code -->
             <div style="display: none;">
                 <span id="stat-epics"></span>
@@ -130,7 +173,6 @@
                 <span id="stat-avg-age"></span>
                 <span id="stat-oldest-age"></span>
                 <span id="stat-oldest-title"></span>
-                <select id="stats-project-filter"></select>
             </div>
 
             <!-- Charts Section -->
@@ -158,8 +200,12 @@
 
         <!-- Sync Tab -->
         <div id="sync-tab" class="tab-content">
-            <div class="sync-panel">
-                <h2>Manual Sync</h2>
+            <div class="sync-panel collapsible-section" data-section="manual-sync">
+                <h2 class="collapsible-header">
+                    <span class="collapse-icon">▼</span>
+                    Manual Sync
+                </h2>
+                <div class="collapsible-content">
                 <p style="color: var(--text-secondary); margin-bottom: 20px;">Sync work items from any project you have access to. Each project is stored separately.</p>
                 
                 <div class="form-group">
@@ -179,46 +225,194 @@
                     <input type="number" id="sync-max-items" value="1000" min="1" max="5000" />
                 </div>
                 
-                <div style="display: flex; gap: 10px;">
-                    <button id="sync-btn" class="primary-btn">Start Sync</button>
-                    <button id="import-btn" class="secondary-btn">Import Historical Data</button>
+                <div style="display: flex; gap: 10px; flex-direction: column;">
+                    <div style="display: flex; gap: 10px;">
+                        <button id="sync-btn" class="primary-btn">Start Sync</button>
+                        <button id="import-btn" class="secondary-btn">Import Historical Data</button>
+                    </div>
+                    <div style="background: #f0f7ff; border-left: 3px solid #667eea; padding: 12px; border-radius: 6px; font-size: 13px;">
+                        <strong>💡 What's the difference?</strong><br>
+                        <span style="color: var(--text-secondary); line-height: 1.6;">
+                            <strong>Start Sync:</strong> Quick sync (respects "From Date" and "Max Items"). Use for regular updates.<br>
+                            <strong>Import Historical:</strong> Complete import of ALL items regardless of date or limit. Slower but comprehensive. Use once for initial setup.
+                        </span>
+                    </div>
+                </div>
                 </div>
             </div>
 
-            <div class="ai-tagging-panel">
-                <h2>🤖 AI Tagging</h2>
-                <p>After syncing, work items receive automatic <strong>hierarchy tags</strong> (orphan, top-level-feature, has-parent). Run AI tagging to add <strong>semantic tags</strong> (authentication, ui, api, etc.) for richer categorization.</p>
+            <div class="sync-panel collapsible-section" data-section="ai-tagging">
+                <h2 class="collapsible-header">
+                    <span class="collapse-icon">▼</span>
+                    🤖 AI Tagging
+                </h2>
+                <div class="collapsible-content">
+                <p style="color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6;">After syncing, work items receive automatic <strong>hierarchy tags</strong> (orphan, top-level-feature, has-parent). Run AI tagging to add <strong>semantic tags</strong> (authentication, ui, api, etc.) for richer categorization.</p>
                 
-                <div class="tagging-info">
-                    <h4>Items Pending AI Tagging</h4>
-                    <p id="pending-tag-count" style="font-size: 32px; font-weight: 700; margin: 10px 0;">0</p>
+                <div style="background: var(--bg-secondary); padding: 20px; border-radius: var(--radius-md); margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: var(--text-secondary);">ITEMS PENDING AI TAGGING</h4>
+                    <p id="pending-tag-count" style="font-size: 48px; font-weight: 700; margin: 0; color: var(--primary-color);">0</p>
                 </div>
                 
                 <div class="batch-size-control">
                     <label style="font-weight: 500;">Batch Size:</label>
-                    <input type="number" id="tag-batch-size" value="10" min="1" max="50" />
+                    <input type="number" id="tag-batch-size" value="10" min="1" max="50" style="width: 80px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; font-weight: 600; text-align: center;" />
                     <span style="font-size: 13px; opacity: 0.9;">Number of items to tag in this batch (1-50)</span>
                 </div>
                 
                 <button id="tag-btn" class="primary-btn" style="background: white; color: #667eea; font-weight: 600;">🏷️ Run AI Tagging</button>
+                </div>
             </div>
 
-            <div class="sync-panel" style="margin-top: 24px;">
-                <h2>Sync Status</h2>
+            <div class="sync-panel collapsible-section collapsed" data-section="ai-retagging">
+                <h2 class="collapsible-header">
+                    <span class="collapse-icon">▶</span>
+                    🔄 AI Re-Tagging
+                </h2>
+                <div class="collapsible-content" style="display: none;">
+                
+                <div style="background: #f0f7ff; border-left: 4px solid #667eea; padding: 16px; border-radius: 6px; margin-bottom: 24px;">
+                    <strong style="color: var(--primary-dark); font-size: 15px;">What is Re-Tagging?</strong>
+                    <p style="color: var(--text-secondary); margin: 8px 0 0 0; line-height: 1.6; font-size: 14px;">
+                        Re-run AI tagging on items that already have tags. Useful when:
+                        <br>• Tag quality was poor (low confidence scores)
+                        <br>• You want to standardize tags across projects
+                        <br>• AI models have improved since initial tagging
+                    </p>
+                </div>
+                
+                <h3 style="font-size: 16px; margin: 0 0 16px 0; font-weight: 600;">Choose What to Re-Tag</h3>
+                
+                <div style="margin-bottom: 24px;">
+                    <label style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; cursor: pointer; border: 2px solid transparent;" class="retag-option">
+                        <input type="radio" name="retag-mode" value="all" checked style="width: 20px; height: 20px; cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">🔄 Re-tag Everything</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">Refresh all items (complete refresh)</div>
+                        </div>
+                        <span id="retag-count-all" style="color: var(--text-tertiary); font-size: 13px; font-weight: 600;">(?)</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; cursor: pointer; border: 2px solid transparent;" class="retag-option">
+                        <input type="radio" name="retag-mode" value="confidence" style="width: 20px; height: 20px; cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">⚠️ Fix Poor Quality Tags</div>
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Only re-tag items with low confidence</div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <label style="font-size: 13px; font-weight: 500;">Re-tag if confidence below:</label>
+                                <input type="number" id="retag-confidence" value="80" min="1" max="100" style="width: 70px; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; text-align: center; font-size: 14px; font-weight: 600;">%
+                            </div>
+                        </div>
+                        <span id="retag-count-confidence" style="color: var(--text-tertiary); font-size: 13px; font-weight: 600;">(?)</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; cursor: pointer; border: 2px solid transparent;" class="retag-option">
+                        <input type="radio" name="retag-mode" value="dateRange" style="width: 20px; height: 20px; cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">📅 Re-tag by Date Range</div>
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Items created between specific dates</div>
+                            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                <div>
+                                    <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">FROM</label>
+                                    <input type="date" id="retag-from-date" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 12px; font-weight: 600; display: block; margin-bottom: 4px;">TO</label>
+                                    <input type="date" id="retag-to-date" style="padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 13px;">
+                                </div>
+                            </div>
+                        </div>
+                        <span id="retag-count-dateRange" style="color: var(--text-tertiary); font-size: 13px; font-weight: 600;">(?)</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; cursor: pointer; border: 2px solid transparent;" class="retag-option">
+                        <input type="radio" name="retag-mode" value="project" style="width: 20px; height: 20px; cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">📁 Re-tag One Project</div>
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">Focus on a specific project</div>
+                            <select id="retag-project" style="width: 100%; max-width: 400px; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
+                                <option value="">Select project...</option>
+                            </select>
+                        </div>
+                        <span id="retag-count-project" style="color: var(--text-tertiary); font-size: 13px; font-weight: 600;">(?)</span>
+                    </label>
+                    
+                    <label style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; cursor: pointer; border: 2px solid transparent;" class="retag-option">
+                        <input type="radio" name="retag-mode" value="untagged" style="width: 20px; height: 20px; cursor: pointer;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">🏷️ Tag Missing Items</div>
+                            <div style="font-size: 13px; color: var(--text-secondary);">Only items with no AI tags</div>
+                        </div>
+                        <span id="retag-count-untagged" style="color: var(--text-tertiary); font-size: 13px; font-weight: 600;">(?)</span>
+                    </label>
+                </div>
+                
+                <div style="background: var(--bg-secondary); padding: 16px; border-radius: 6px; margin-bottom: 20px;">
+                    <label style="display: block; font-weight: 600; font-size: 14px; margin-bottom: 8px;">Batch Size</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="number" id="retag-batch-size" value="50" min="1" max="100" style="width: 100px; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 16px; font-weight: 600; text-align: center;">
+                        <span style="font-size: 13px; color: var(--text-secondary);">items per batch (1-100). Larger batches are faster but harder to cancel.</span>
+                    </div>
+                </div>
+                
+                <div style="background: #fff9e6; border: 2px solid #ffa500; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: start; gap: 12px;">
+                        <span style="font-size: 24px;">⚠️</span>
+                        <div>
+                            <strong style="display: block; margin-bottom: 6px; font-size: 14px; color: #cc8800;">Before You Start</strong>
+                            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.7;">
+                                <li>Re-tagging takes ~2-5 seconds per item</li>
+                                <li>Your current tags are automatically backed up</li>
+                                <li>You can cancel anytime (stops after current batch)</li>
+                                <li>Hierarchy tags (orphan, has-parent) are preserved</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button id="retag-estimate-btn" class="secondary-btn" style="padding: 12px 24px; font-size: 14px;">📊 Estimate Count</button>
+                    <button id="retag-execute-btn" class="primary-btn" style="padding: 12px 32px; font-size: 14px; font-weight: 600;">🚀 Start Re-Tagging</button>
+                </div>
+                
+                <div id="retag-progress" style="margin-top: 20px; display: none;">
+                    <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); height: 36px; overflow: hidden; margin-bottom: 12px;">
+                        <div id="retag-progress-bar" style="background: var(--primary-color); height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600;"></div>
+                    </div>
+                    <div id="retag-status-text" style="text-align: center; color: var(--text-secondary); font-size: 13px;"></div>
+                    <div style="text-align: center; margin-top: 12px;">
+                        <button id="retag-cancel-btn" class="secondary-btn">Cancel Re-Tagging</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div class="sync-panel collapsible-section collapsed" data-section="sync-status">
+                <h2 class="collapsible-header">
+                    <span class="collapse-icon">▶</span>
+                    Sync Status
+                </h2>
+                <div class="collapsible-content" style="display: none;">
                 <div class="sync-status">
                     <div id="sync-status-content">
                         <p style="text-align: center; color: var(--text-tertiary);">Loading...</p>
                     </div>
                 </div>
+                </div>
             </div>
 
-            <div class="sync-panel" style="margin-top: 24px;">
+            <div class="sync-panel collapsible-section collapsed" data-section="sync-history">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h2 style="margin: 0;">Sync History</h2>
+                    <h2 class="collapsible-header" style="margin: 0;">
+                        <span class="collapse-icon">▶</span>
+                        Sync History
+                    </h2>
                     <button id="clear-sync-history-btn" class="secondary-btn" style="font-size: 13px; padding: 6px 12px;">Clear History</button>
                 </div>
+                <div class="collapsible-content" style="display: none;">
                 <div id="sync-history-content">
                     <p style="text-align: center; color: var(--text-tertiary); padding: 20px;">Loading...</p>
+                </div>
                 </div>
             </div>
         </div>

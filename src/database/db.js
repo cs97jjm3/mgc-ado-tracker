@@ -219,6 +219,41 @@ function migrateMissingTables() {
   }
 }
 
+// Migration: Add retag backup columns for v1.4.0
+function migrateRetagBackupColumns() {
+  try {
+    const result = db.exec(`PRAGMA table_info(work_items)`);
+    const columns = result[0]?.values || [];
+    const columnNames = columns.map(col => col[1]);
+    
+    const newColumns = [
+      { name: 'tags_backup', type: 'TEXT' },
+      { name: 'confidence_scores_backup', type: 'TEXT' },
+      { name: 'backup_timestamp', type: 'TEXT' },
+      { name: 'last_retagged_at', type: 'TEXT' }
+    ];
+    
+    let migrated = false;
+    for (const col of newColumns) {
+      if (!columnNames.includes(col.name)) {
+        try {
+          db.exec(`ALTER TABLE work_items ADD COLUMN ${col.name} ${col.type}`);
+          migrated = true;
+        } catch (err) {
+          console.error(`Migration: Error adding column ${col.name}:`, err.message);
+        }
+      }
+    }
+    
+    if (migrated) {
+      saveDatabase();
+      console.error('Migration: Added retag backup columns to work_items table');
+    }
+  } catch (error) {
+    console.error('Migration error (retag backup):', error.message);
+  }
+}
+
 // Migration: Add enhanced fields for v1.3.0
 function migrateEnhancedFields() {
   try {
@@ -336,6 +371,7 @@ export async function initDatabase() {
       migrateMissingTables();
       migrateNeedsTaggingColumn();
       migrateEnhancedFields();
+      migrateRetagBackupColumns();
     } else {
       // Create brand new database with full schema
       db = new SQL.Database();

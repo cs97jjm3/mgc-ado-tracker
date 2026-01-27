@@ -605,6 +605,71 @@ export function getWorkItemStats() {
     LIMIT 1
   `)[0];
 
+  // NEW ADDITIONAL STATS
+  
+  // Top assignees with open items
+  const topAssignees = db.exec(`
+    SELECT assigned_to, COUNT(*) as count
+    FROM work_items
+    WHERE state NOT IN ('Closed', 'Resolved')
+    AND assigned_to IS NOT NULL
+    AND assigned_to != ''
+    GROUP BY assigned_to
+    ORDER BY count DESC
+    LIMIT 10
+  `)[0]?.values || [];
+
+  // Unassigned items
+  const unassignedCount = db.exec(`
+    SELECT COUNT(*) as count
+    FROM work_items
+    WHERE (assigned_to IS NULL OR assigned_to = '')
+    AND state NOT IN ('Closed', 'Resolved')
+  `)[0]?.values[0]?.[0] || 0;
+
+  // Recently modified (last 7 days)
+  const recentlyModifiedCount = db.exec(`
+    SELECT COUNT(*) as count
+    FROM work_items
+    WHERE modified_date >= datetime('now', '-7 days')
+  `)[0]?.values[0]?.[0] || 0;
+
+  // Items closed per week for last 8 weeks (velocity trend)
+  const velocityData = [];
+  for (let i = 0; i < 8; i++) {
+    const weekStart = db.exec(`
+      SELECT datetime('now', '-${i * 7} days', 'weekday 0', '-7 days')
+    `)[0]?.values[0]?.[0];
+    
+    const weekEnd = db.exec(`
+      SELECT datetime('now', '-${i * 7} days', 'weekday 0')
+    `)[0]?.values[0]?.[0];
+    
+    const closedCount = db.exec(`
+      SELECT COUNT(*) as count
+      FROM work_items
+      WHERE closed_date >= ?
+      AND closed_date < ?
+    `, [weekStart, weekEnd])[0]?.values[0]?.[0] || 0;
+    
+    velocityData.unshift({ // unshift to get chronological order
+      week: `Week ${8 - i}`,
+      weekStart,
+      weekEnd,
+      closed: closedCount
+    });
+  }
+
+  // Average time to close (in days)
+  const avgTimeToClose = db.exec(`
+    SELECT AVG(
+      julianday(closed_date) - julianday(created_date)
+    ) as avg
+    FROM work_items
+    WHERE closed_date IS NOT NULL
+    AND closed_date != ''
+  `)[0]?.values[0]?.[0] || 0;
+
   return {
     byType: byType.map(([type, count]) => ({ type, count })),
     byState: byState.map(([state, count]) => ({ state, count })),
@@ -641,6 +706,13 @@ export function getWorkItemStats() {
       id: oldestOpenItem.values[0][0],
       title: oldestOpenItem.values[0][1],
       ageDays: Math.round(oldestOpenItem.values[0][2])
-    } : null
+    } : null,
+    
+    // NEW: Additional stats
+    topAssignees: topAssignees.map(([name, count]) => ({ name, count })),
+    unassignedCount,
+    recentlyModifiedCount,
+    velocityData,
+    avgTimeToClose: Math.round(avgTimeToClose * 10) / 10
   };
 }

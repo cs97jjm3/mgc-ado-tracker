@@ -135,9 +135,64 @@ async function updateSyncStatusIndicator() {
 
 // Update sync status on load and every 30 seconds
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize collapsible sections
+    initializeCollapsibleSections();
+    
     updateSyncStatusIndicator();
     setInterval(updateSyncStatusIndicator, 30000);
 });
+
+// Initialize collapsible sections
+function initializeCollapsibleSections() {
+    const headers = document.querySelectorAll('.collapsible-header');
+    headers.forEach(header => {
+        header.addEventListener('click', function(e) {
+            // Don't collapse if clicking a button inside header (like Clear History)
+            if (e.target.closest('button') && e.target.closest('button') !== this) return;
+            
+            const section = this.closest('.collapsible-section');
+            const content = section.querySelector('.collapsible-content');
+            const icon = section.querySelector('.collapse-icon');
+            
+            if (section.classList.contains('collapsed')) {
+                // Expand
+                section.classList.remove('collapsed');
+                content.style.display = 'block';
+                icon.textContent = '▼';
+                
+                // Save state
+                const sectionId = section.dataset.section;
+                if (sectionId) {
+                    localStorage.setItem(`mgc-ado-section-${sectionId}`, 'expanded');
+                }
+            } else {
+                // Collapse
+                section.classList.add('collapsed');
+                content.style.display = 'none';
+                icon.textContent = '▶';
+                
+                // Save state
+                const sectionId = section.dataset.section;
+                if (sectionId) {
+                    localStorage.setItem(`mgc-ado-section-${sectionId}`, 'collapsed');
+                }
+            }
+        });
+    });
+    
+    // Restore saved states
+    document.querySelectorAll('.collapsible-section').forEach(section => {
+        const sectionId = section.dataset.section;
+        if (sectionId) {
+            const savedState = localStorage.getItem(`mgc-ado-section-${sectionId}`);
+            if (savedState === 'expanded' && section.classList.contains('collapsed')) {
+                section.querySelector('.collapsible-header').click();
+            } else if (savedState === 'collapsed' && !section.classList.contains('collapsed')) {
+                section.querySelector('.collapsible-header').click();
+            }
+        }
+    });
+}
 
 // ============================================
 // KEYBOARD SHORTCUTS
@@ -490,6 +545,9 @@ async function loadStats() {
             
             // Display initial charts (all projects)
             displayStatsCharts('');
+            
+            // NEW: Display additional stats
+            displayNewStats(data);
         }
         
         if (tags.success) {
@@ -661,6 +719,9 @@ function displayStatsCharts(projectFilter) {
         displayChart('chart-by-type', byTypeArray);
         displayChart('chart-by-state', byStateArray);
         displayProjectChart('chart-by-project', byProjectArray);
+        
+        // NEW: Also update the new stats with server data (all projects)
+        displayNewStats(data);
         return;
     }
     
@@ -846,6 +907,9 @@ function displayStatsCharts(projectFilter) {
     displayChart('chart-by-type', byTypeArray);
     displayChart('chart-by-state', byStateArray);
     displayProjectChart('chart-by-project', byProjectArray);
+    
+    // NEW: Recalculate the new stats from filtered items
+    recalculateNewStatsFiltered(items);
 }
 
 function displayChart(elementId, data) {
@@ -1592,3 +1656,406 @@ function showOldestItem() {
         showWorkItemDetails(window.oldestOpenItemId);
     }
 }
+
+// ============================================
+// DISPLAY NEW STATISTICS
+// ============================================
+function displayNewStats(data) {
+    // Team & Workload stats
+    document.getElementById('stat-unassigned').textContent = data.unassignedCount || 0;
+    document.getElementById('stat-recent-modified').textContent = data.recentlyModifiedCount || 0;
+    document.getElementById('stat-avg-close').textContent = (data.avgTimeToClose || 0) + ' days';
+    
+    // Display top assignees chart
+    displayAssigneesChart(data.topAssignees || []);
+    
+    // Display velocity trend chart
+    displayVelocityChart(data.velocityData || []);
+}
+
+// Display assignees chart
+function displayAssigneesChart(assignees) {
+    const element = document.getElementById('chart-assignees');
+    
+    if (assignees.length === 0) {
+        element.innerHTML = '<p>No assignee data available</p>';
+        return;
+    }
+    
+    const maxCount = Math.max(...assignees.map(a => a.count));
+    
+    const html = assignees.map(assignee => {
+        const width = (assignee.count / maxCount) * 100;
+        // Extract just the name (before @ or < symbols)
+        const displayName = assignee.name.split('@')[0].split('<')[0].trim();
+        
+        return `
+            <div class="chart-bar">
+                <div class="chart-label">${escapeHtml(displayName)}</div>
+                <div class="chart-bar-fill" style="width: ${width}%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);">${assignee.count}</div>
+            </div>
+        `;
+    }).join('');
+    
+    element.innerHTML = html;
+}
+
+// Display velocity trend chart
+function displayVelocityChart(velocityData) {
+    const element = document.getElementById('chart-velocity');
+    
+    if (velocityData.length === 0) {
+        element.innerHTML = '<p>No velocity data available</p>';
+        return;
+    }
+    
+    const maxClosed = Math.max(...velocityData.map(v => v.closed));
+    
+    const html = velocityData.map((week, index) => {
+        const width = maxClosed > 0 ? (week.closed / maxClosed) * 100 : 0;
+        
+        // Color gradient from red (low) to green (high)
+        let color;
+        if (week.closed === 0) {
+            color = '#999';
+        } else if (width < 33) {
+            color = 'linear-gradient(90deg, #f48771 0%, #f5576c 100%)';
+        } else if (width < 66) {
+            color = 'linear-gradient(90deg, #ffa500 0%, #fa709a 100%)';
+        } else {
+            color = 'linear-gradient(90deg, #43e97b 0%, #38f9d7 100%)';
+        }
+        
+        // Format week end date nicely
+        const weekEndDate = new Date(week.weekEnd);
+        const formattedDate = weekEndDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        
+        return `
+            <div class="chart-bar">
+                <div class="chart-label" style="min-width: 180px;">
+                    <div style="font-weight: 600;">${week.week}</div>
+                    <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 2px;">Ending ${formattedDate}</div>
+                </div>
+                <div class="chart-bar-fill" style="width: ${width}%; background: ${color};">${week.closed}</div>
+            </div>
+        `;
+    }).join('');
+    
+    element.innerHTML = html;
+}
+
+// Recalculate new stats from filtered items
+function recalculateNewStatsFiltered(items) {
+    const now = new Date();
+    const week = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    // Unassigned items
+    const unassignedCount = items.filter(item => {
+        return (!item.assigned_to || item.assigned_to === '') &&
+               item.state !== 'Closed' && item.state !== 'Resolved';
+    }).length;
+    
+    // Recently modified (7 days)
+    const recentlyModifiedCount = items.filter(item => {
+        return new Date(item.modified_date) >= week;
+    }).length;
+    
+    // Avg time to close
+    const closedItems = items.filter(item => item.closed_date && item.closed_date !== '');
+    let totalDays = 0;
+    closedItems.forEach(item => {
+        const created = new Date(item.created_date);
+        const closed = new Date(item.closed_date);
+        const days = (closed - created) / (24 * 60 * 60 * 1000);
+        totalDays += days;
+    });
+    const avgTimeToClose = closedItems.length > 0 ? (totalDays / closedItems.length).toFixed(1) : 0;
+    
+    // Top assignees with open items
+    const assigneeCounts = {};
+    items.forEach(item => {
+        if (item.assigned_to && item.assigned_to !== '' &&
+            item.state !== 'Closed' && item.state !== 'Resolved') {
+            assigneeCounts[item.assigned_to] = (assigneeCounts[item.assigned_to] || 0) + 1;
+        }
+    });
+    const topAssignees = Object.entries(assigneeCounts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+    
+    // Velocity data (items closed per week for last 8 weeks)
+    const velocityData = [];
+    for (let i = 0; i < 8; i++) {
+        const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+        const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+        
+        const closedCount = items.filter(item => {
+            if (!item.closed_date || item.closed_date === '') return false;
+            const closedDate = new Date(item.closed_date);
+            return closedDate >= weekStart && closedDate < weekEnd;
+        }).length;
+        
+        velocityData.unshift({
+            week: `Week ${8 - i}`,
+            weekStart: weekStart.toISOString(),
+            weekEnd: weekEnd.toISOString(),
+            closed: closedCount
+        });
+    }
+    
+    // Update displays
+    document.getElementById('stat-unassigned').textContent = unassignedCount;
+    document.getElementById('stat-recent-modified').textContent = recentlyModifiedCount;
+    document.getElementById('stat-avg-close').textContent = avgTimeToClose + ' days';
+    
+    displayAssigneesChart(topAssignees);
+    displayVelocityChart(velocityData);
+}
+
+// ============================================
+// AI RE-TAGGING FUNCTIONALITY
+// ============================================
+
+let retagProgressInterval = null;
+
+// Event listeners for re-tagging
+document.getElementById('retag-estimate-btn').addEventListener('click', estimateRetag);
+document.getElementById('retag-execute-btn').addEventListener('click', executeRetag);
+document.getElementById('retag-cancel-btn').addEventListener('click', cancelRetagOperation);
+
+// Load retag project dropdown when sync tab loads
+async function loadRetagProjects() {
+    try {
+        const response = await fetch('/api/projects');
+        const data = await response.json();
+        
+        if (data.success && data.data.length > 0) {
+            const select = document.getElementById('retag-project');
+            select.innerHTML = '<option value="">Select project...</option>';
+            
+            data.data.sort((a, b) => a.name.localeCompare(b.name)).forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.name;
+                option.textContent = project.name;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading retag projects:', error);
+    }
+}
+
+// Get selected re-tag mode and options
+function getRetagOptions() {
+    const mode = document.querySelector('input[name="retag-mode"]:checked').value;
+    const options = {
+        mode,
+        batchSize: parseInt(document.getElementById('retag-batch-size').value) || 50,
+        preserveHierarchyTags: true
+    };
+    
+    switch(mode) {
+        case 'confidence':
+            options.confidenceThreshold = parseFloat(document.getElementById('retag-confidence').value) / 100;
+            break;
+        case 'dateRange':
+            options.fromDate = document.getElementById('retag-from-date').value;
+            options.toDate = document.getElementById('retag-to-date').value;
+            if (!options.fromDate || !options.toDate) {
+                throw new Error('Please select both from and to dates');
+            }
+            break;
+        case 'project':
+            options.projectName = document.getElementById('retag-project').value;
+            if (!options.projectName) {
+                throw new Error('Please select a project');
+            }
+            break;
+    }
+    
+    return options;
+}
+
+// Estimate re-tag count
+async function estimateRetag() {
+    try {
+        const options = getRetagOptions();
+        const btn = document.getElementById('retag-estimate-btn');
+        btn.disabled = true;
+        btn.textContent = 'Estimating...';
+        
+        const response = await fetch('/api/retag/estimate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(options)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const count = data.data.estimatedCount;
+            const countText = `(~${count.toLocaleString()} items)`;
+            
+            // Update count display for current mode
+            const mode = options.mode;
+            const countElement = document.getElementById(`retag-count-${mode}`);
+            if (countElement) {
+                countElement.textContent = countText;
+                countElement.style.color = count > 0 ? '#667eea' : '#999';
+            }
+            
+            ToastManager.success('Estimate Complete', `Found ${count.toLocaleString()} items matching criteria`);
+        } else {
+            ToastManager.error('Estimate Failed', data.error);
+        }
+    } catch (error) {
+        ToastManager.error('Error', error.message);
+    } finally {
+        const btn = document.getElementById('retag-estimate-btn');
+        btn.disabled = false;
+        btn.textContent = 'Estimate Count';
+    }
+}
+
+// Execute re-tagging
+async function executeRetag() {
+    try {
+        const options = getRetagOptions();
+        
+        // Confirm with user
+        const confirmMsg = `This will re-tag items using AI. Current tags will be backed up. Continue?`;
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+        
+        const btn = document.getElementById('retag-execute-btn');
+        const estimateBtn = document.getElementById('retag-estimate-btn');
+        btn.disabled = true;
+        estimateBtn.disabled = true;
+        btn.textContent = 'Starting...';
+        
+        // Show progress UI
+        document.getElementById('retag-progress').style.display = 'block';
+        updateRetagProgress(0, 'Initializing...');
+        
+        // Start re-tagging
+        const response = await fetch('/api/retag/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(options)
+        });
+        
+        // Start polling for progress
+        startRetagProgressPolling();
+        
+        const data = await response.json();
+        
+        // Stop polling
+        stopRetagProgressPolling();
+        
+        if (data.success) {
+            updateRetagProgress(100, 'Complete!');
+            ToastManager.success('Re-Tagging Complete', 
+                `Processed ${data.data.itemsProcessed} items (${data.data.successCount} success, ${data.data.errorCount} errors) in ${(data.data.durationMs / 1000).toFixed(1)}s`);
+            
+            // Refresh pending tag count
+            loadPendingTagCount();
+            
+            // Hide progress after 3 seconds
+            setTimeout(() => {
+                document.getElementById('retag-progress').style.display = 'none';
+            }, 3000);
+        } else {
+            updateRetagProgress(0, 'Failed');
+            ToastManager.error('Re-Tagging Failed', data.error);
+        }
+    } catch (error) {
+        stopRetagProgressPolling();
+        ToastManager.error('Error', error.message);
+    } finally {
+        const btn = document.getElementById('retag-execute-btn');
+        const estimateBtn = document.getElementById('retag-estimate-btn');
+        btn.disabled = false;
+        estimateBtn.disabled = false;
+        btn.textContent = 'Start Re-Tagging';
+    }
+}
+
+// Start polling for re-tag progress
+function startRetagProgressPolling() {
+    stopRetagProgressPolling(); // Clear any existing interval
+    
+    retagProgressInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/api/retag/progress');
+            const data = await response.json();
+            
+            if (data.success && data.data.inProgress) {
+                const progress = data.data;
+                const statusText = `${progress.processedItems} / ${progress.totalItems} items (${progress.successCount} success, ${progress.errorCount} errors)`;
+                updateRetagProgress(progress.percentage, statusText);
+                
+                if (progress.currentItem) {
+                    document.getElementById('retag-status-text').textContent = `Processing: ${progress.currentItem}`;
+                }
+            } else if (data.success && !data.data.inProgress) {
+                stopRetagProgressPolling();
+            }
+        } catch (error) {
+            console.error('Error polling retag progress:', error);
+        }
+    }, 1000); // Poll every second
+}
+
+// Stop polling for progress
+function stopRetagProgressPolling() {
+    if (retagProgressInterval) {
+        clearInterval(retagProgressInterval);
+        retagProgressInterval = null;
+    }
+}
+
+// Update re-tag progress UI
+function updateRetagProgress(percentage, statusText) {
+    const progressBar = document.getElementById('retag-progress-bar');
+    const statusElement = document.getElementById('retag-status-text');
+    
+    progressBar.style.width = percentage + '%';
+    progressBar.textContent = percentage > 0 ? `${percentage}%` : '';
+    
+    if (statusText) {
+        statusElement.textContent = statusText;
+    }
+}
+
+// Cancel re-tagging operation
+async function cancelRetagOperation() {
+    try {
+        const response = await fetch('/api/retag/cancel', {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            ToastManager.info('Cancelling', 'Re-tagging will stop after current batch');
+            stopRetagProgressPolling();
+        } else {
+            ToastManager.warning('Not Running', data.message || 'No re-tagging operation in progress');
+        }
+    } catch (error) {
+        ToastManager.error('Error', error.message);
+    }
+}
+
+// Update tab switching to load retag projects
+const originalTabSwitching = document.querySelectorAll('.tab-btn');
+originalTabSwitching.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const tabName = btn.dataset.tab;
+        if (tabName === 'sync') {
+            loadRetagProjects();
+        }
+    });
+});

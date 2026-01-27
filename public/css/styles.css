@@ -557,28 +557,30 @@ button:focus-visible {
 .batch-size-control label {
     font-weight: 500;
     font-size: 14px;
+    color: var(--text-primary);
 }
 
 .batch-size-control input {
     width: 80px;
     padding: 8px 12px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.1);
-    color: white;
+    background: white;
+    color: var(--text-primary);
     font-size: 14px;
     font-weight: 600;
+    text-align: center;
 }
 
 .batch-size-control input:focus {
     outline: none;
-    border-color: white;
-    background: rgba(255, 255, 255, 0.2);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px var(--primary-color);
 }
 
 .batch-size-control span {
     font-size: 13px;
-    opacity: 0.85;
+    color: var(--text-secondary);
 }
 
 /* Sync Status */
@@ -908,4 +910,72 @@ button:focus-visible {
     .chart-label {
         min-width: auto;
     }
+}
+
+/* Re-tag Option Hover States */
+.retag-option {
+    transition: all 0.2s ease;
+}
+
+.retag-option:hover {
+    background: var(--bg-hover) !important;
+    border-color: var(--primary-color) !important;
+    transform: translateX(4px);
+}
+
+.retag-option input[type="radio"]:checked ~ div {
+    color: var(--primary-color);
+}
+
+.retag-option:has(input[type="radio"]:checked) {
+    border-color: var(--primary-color) !important;
+    background: var(--bg-hover) !important;
+}
+
+/* Collapsible Sections */
+.collapsible-section {
+    margin-bottom: var(--spacing-lg);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.collapsible-header {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    transition: all 0.2s ease;
+    padding: 4px 0;
+    margin: 0;
+}
+
+.collapsible-header:hover {
+    color: var(--primary-color);
+}
+
+.collapse-icon {
+    display: inline-block;
+    font-size: 14px;
+    transition: transform 0.3s ease;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.collapsible-section.collapsed .collapse-icon {
+    transform: rotate(0deg);
+}
+
+.collapsible-content {
+    overflow: hidden;
+    transition: all 0.3s ease;
+    max-height: 5000px;
+    opacity: 1;
+}
+
+.collapsible-section.collapsed .collapsible-content {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
 }
