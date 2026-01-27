@@ -544,7 +544,7 @@ function displaySearchResults(items) {
         <div class="work-item-card" onclick="showWorkItemDetails('${item.ado_id}')">
             <div class="work-item-header">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 20px;">${icon}</span>
+                    <span style="font-size: 45px;">${icon}</span>
                     <div>
                         <div class="work-item-title">${escapeHtml(item.title)}</div>
                         <div class="work-item-id">#${item.ado_id} • ${item.work_item_type} ${item.project_name ? `• <span style="color: #999; font-size: 12px;">${item.project_name}</span>` : ''}</div>
