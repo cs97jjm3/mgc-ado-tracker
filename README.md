@@ -1,4 +1,4 @@
-# MGC ADO Tracker
+# MGC ADO Tracker MCP
 
 🔐 **Secure Azure DevOps work item tracking with AI-powered tagging, role-based access control, and comprehensive analytics.**
 
