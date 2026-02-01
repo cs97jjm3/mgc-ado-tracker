@@ -2,7 +2,73 @@
 
 All notable changes to MGC ADO Tracker will be documented in this file.
 
-## [2.1.0] - 2026-01-27
+## [2.3.0] - 2026-02-01
+
+### Added
+- **Comprehensive Authentication System**:
+  - Session-based authentication with role-based access control
+  - User management interface for admins
+  - Login page with "Remember me" functionality
+  - Default admin account (username: admin, password: admin123)
+  - Password hashing with bcrypt (10 salt rounds)
+  - Session timeout configuration (default: 24 hours, "Remember me": 30 days)
+  - httpOnly secure cookies for XSS protection
+  - Last login tracking for all users
+  - Soft delete for user accounts (data preserved)
+- **Role-Based Access Control**:
+  - Admin role: Full access to all features
+  - User role: Search, statistics, and export only
+  - Protected routes with middleware enforcement
+  - Server-side permission validation
+- **User Management (Admin Only)**:
+  - Create new users with email, password, display name, and role
+  - Edit user details (username, display name, role, active status)
+  - Delete (deactivate) users while preserving data
+  - Password change interface (users can change own, admins can reset any)
+  - Password requirements (minimum 8 characters)
+  - Cannot delete or edit own account
+  - View user list with last login timestamps
+- **Protected Features**:
+  - Sync operations: Admin only
+  - AI Tagging & Re-Tagging: Admin only
+  - Settings & Configuration: Admin only
+  - Database backup & management: Admin only
+  - User Management: Admin only
+  - Search & Statistics: All authenticated users
+  - CSV Export: All authenticated users
+
+### Changed
+- **UI Updates**:
+  - Professional login page with MGC branding
+  - User dropdown in header with logout button
+  - Users tab (only visible to admins)
+  - Role-based tab visibility (Sync, Settings, Users)
+  - Improved security messaging throughout
+- **Database Schema**:
+  - New `users` table with authentication fields
+  - New `sessions` table for session management
+  - User tracking on all operations
+- **API Endpoints**:
+  - All routes now require authentication
+  - Role-based endpoint protection
+  - Proper 401/403 responses for unauthorized access
+
+### Security
+- Password hashing with bcrypt and 10 salt rounds
+- Session-based authentication with express-session
+- httpOnly cookies prevent XSS attacks
+- CSRF protection via session management
+- Secure password reset workflow (admin-initiated)
+- Auto-logout on session expiration
+- No password exposure in logs or responses
+
+### Fixed
+- User creation: Fixed parameter mismatch between API and auth module
+- Password change: Fixed to allow admin password resets without old password
+- Session persistence across page reloads
+- Proper error handling for authentication failures
+
+## [2.2.0] - 2026-01-27
 
 ### Added
 - **Collapsible Sections**: All Sync page sections now expand/collapse with state persistence

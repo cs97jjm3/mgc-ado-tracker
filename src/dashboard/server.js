@@ -171,9 +171,21 @@ app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and password required' });
     }
     
-    const user = createUser(email, password, role || 'user', displayName);
-    res.json({ success: true, data: { user } });
+    const result = createUser({
+      username: email,
+      password: password,
+      email: email,
+      fullName: displayName,
+      role: role || 'user'
+    });
+    
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    
+    res.json({ success: true, data: result });
   } catch (error) {
+    console.error('Error creating user:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -1,5 +1,5 @@
 # Contributing to MGC ADO Tracker
-
+ 
 Thanks for your interest in contributing!
 
 ## Getting Started

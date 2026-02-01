@@ -3,7 +3,7 @@
 🔐 **Secure Azure DevOps work item tracking with AI-powered tagging, role-based access control, and comprehensive analytics.**
 
 ## What It Does
-
+ 
 MGC ADO Tracker solves a real problem: **finding work items in messy Azure DevOps projects**.
 
 - 🔐 **Secure Authentication**: Role-based access with admin and user roles

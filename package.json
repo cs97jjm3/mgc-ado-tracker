@@ -1,7 +1,7 @@
 {
   "name": "mgc-ado-tracker",
-  "version": "2.2.0",
-  "description": "Track Azure DevOps work items with AI-powered tagging and intelligent search",
+  "version": "2.3.0",
+  "description": "Secure Azure DevOps work item tracking with AI-powered tagging, role-based access control, and comprehensive analytics",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
@@ -14,10 +14,17 @@
     "work-items",
     "tracking",
     "mcp",
-    "business-analyst"
+    "business-analyst",
+    "authentication",
+    "role-based-access",
+    "ai-tagging"
   ],
-  "author": "James Murrell",
+  "author": "James Martin <james.martin@theaccessgroup.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cs97jjm3/mgc-ado-tracker.git"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@modelcontextprotocol/sdk": "^1.25.2",

@@ -289,38 +289,66 @@ document.getElementById('user-cancel-btn').addEventListener('click', () => {
 
 document.getElementById('user-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const userId = document.getElementById('user-id').value;
-    const email = document.getElementById('user-email').value;
+    const email = document.getElementById('user-email').value.trim();
     const password = document.getElementById('user-password').value;
-    const displayName = document.getElementById('user-display-name').value;
+    const displayName = document.getElementById('user-display-name').value.trim();
     const role = document.getElementById('user-role').value;
-    
-    const userData = { email, displayName, role };
-    if (password) userData.password = password;
-    
+
+    if (!email) {
+        ToastManager.error('Validation Error', 'Email is required');
+        return;
+    }
+
+    // 🔒 CRITICAL FIX: password required for NEW users
+    if (!userId && !password) {
+        ToastManager.error('Validation Error', 'Password is required for new users');
+        return;
+    }
+
+    const userData = {
+        email,
+        displayName,
+        role
+    };
+
+    // Only send password if explicitly provided
+    if (password && password.trim() !== '') {
+        userData.password = password;
+    }
+
     try {
-        const url = userId ? `/api/users/${userId}` : '/api/users';
-        const method = userId ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(userData)
-        });
-        
+        const response = await fetch(
+            userId ? `/api/users/${userId}` : '/api/users',
+            {
+                method: userId ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData)
+            }
+        );
+
         const data = await response.json();
-        if (data.success) {
-            ToastManager.success('Success', userId ? 'User updated' : 'User created');
-            document.getElementById('user-modal').style.display = 'none';
-            loadUsers();
-        } else {
-            ToastManager.error('Error', data.error);
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to save user');
         }
+
+        ToastManager.success(
+            'Success',
+            userId ? 'User updated' : 'User created'
+        );
+
+        document.getElementById('user-modal').style.display = 'none';
+        document.getElementById('user-password').value = '';
+        await loadUsers();
+
     } catch (error) {
+        console.error('User save failed:', error);
         ToastManager.error('Error', error.message);
     }
 });
+
 
 // Initialize collapsible sections
 function initializeCollapsibleSections() {

@@ -79,7 +79,7 @@
     "DASHBOARD_PORT": {
       "type": "number",
       "title": "Dashboard Port",
-      "description": "Port for web dashboard",
+      "description": "Port for web dashboard.",
       "required": false,
       "default": 3738,
       "sensitive": false
