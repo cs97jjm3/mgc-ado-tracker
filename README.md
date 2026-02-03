@@ -734,9 +734,9 @@ Add to your Claude Desktop config:
 
 ## About
 
-Built by James Martin, Business Analyst at The Access Group.
+Built by James Murrell, Business Analyst
 
-**Contact**: james.martin@theaccessgroup.com  
+**Contact**:   
 **GitHub**: https://github.com/cs97jjm3/mgc-ado-tracker  
 **Gumroad Guide**: [The Business Analyst's Guide to AI-Assisted Tool Development](https://gumroad.com)
 
